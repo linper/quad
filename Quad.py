@@ -106,9 +106,9 @@ def getCommands():
     # setMovementState(last_movement_properties[0][3], last_movement_properties[1][2])
     # walking2(last_movement_properties[0], last_movement_properties[1], last_movement_properties[2])
 
-    # makeMovementArgs(p.readUserDebugParameter(speed), p.readUserDebugParameter(turn),
-    #                  p.readUserDebugParameter(cross_step), p.readUserDebugParameter(step_height))
-    makeMovementArgsLite()
+    makeMovementArgs(p.readUserDebugParameter(speed), p.readUserDebugParameter(turn),
+                     p.readUserDebugParameter(cross_step), p.readUserDebugParameter(step_height))
+    # makeMovementArgsLite()
     # if not test_stop:#TODO
     updateLegs()
     touch_force_max = np.array([0, 0, 0, 0])
@@ -331,14 +331,9 @@ def setMovementState(sp, trn):
     global process_monocount
     global advance_process_table
     global drift_coaf
-    # if round(sp, 4) < starting_speed:#todo
-    #     sp = starting_speed
     if process_monocount + sp >= 1:
-        # print()
         process_monocount = (process_monocount + sp) % 1
-        # if round(sp, 4) > starting_speed or abs(trn) >= 0.01:#todo
-        if round(sp, 4) > 0.01 and starting_speed > 0.1: # starting speed is used as start/stop walking parameter, need to fix names todo
-        # if round(sp, 4) > 0.01:
+        if round(sp, 4) > 0.01 and round(starting_speed, ndigits=3) >= go_threshold: # starting speed is used as start/stop walking parameter, need to fix names todo
             process = 1
         else:
             process = 2
@@ -1081,6 +1076,7 @@ clock_wise_sequence = [0, 1, 3, 2]
 cross_sequence = [0, 3, 1, 2]
 drift_coaf = 0
 drift_table = np.array([0.0, 0.0])
+go_threshold = 0.001
 grounded_legs = np.array([False, False, False, False])
 horizontal_turn_matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 indiv_air_tick_counts = np.array([0, 0, 0, 0])
@@ -1132,7 +1128,8 @@ sit_up = p.addUserDebugParameter("sit up", -0.04, 0.04, 0)
 step_height = p.addUserDebugParameter("step height", 0, 0.3, 0)
 spread = p.addUserDebugParameter("spread", 0, math.pi / 6, math.pi / 60)
 # param = p.addUserDebugParameter("parameter", 0.02, 2, 0.02)
-param2 = p.addUserDebugParameter("parameter2", 0, 0.25, 0.1)
+param2 = p.addUserDebugParameter("stop/go", 0, 0.001, 0.)
+# param3 = p.addUserDebugParameter("parameter3", 0, 0.001, 0.)
 
 # for j in range(0, 17):
 #     print(p.getJointInfo(quad, j)[1])
