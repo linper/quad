@@ -7,42 +7,6 @@ import math
 import threading
 import queue
 
-# def timeManger():
-#     global test_counter
-#     timer = threading.Timer(1.0, timeManger)
-#     timer.start()
-#     test_counter += 1
-#     print(test_counter)
-#     if test_counter == 10:
-#         print(test_counter, test_counter2, test_counter2 / test_counter)
-#         timer.cancel()
-#
-# def timeManger2():
-#     global test_counter2
-#     timer = threading.Timer(0.015, timeManger2)
-#     timer.start()
-#     test_counter2 += 1
-#
-# def mainTimeManager():
-#     timer = threading.Timer(1 / 1000 * 50 * p.readUserDebugParameter(param), mainTimeManager)
-#     timer.start()
-#     p.stepSimulation()
-#     # for i in range(4):
-#     #     touch_force_max[i] = max(-p.getJointState(quad, SENSORS[i])[2][2], touch_force_max[i])
-#
-# def test_func():
-#     global test_counter2
-#     global timer_running
-#     if test_counter == -1 and test_counter2 == 200:
-#         timer_running = True
-#         test_counter2 = 0
-#         timeManger()
-#         print("timer started")
-#     # if test_counter == 10:
-#         # timer_running = False
-#
-#     test_counter2 += 1
-
 
 def toStartingPosition():
     global positions
@@ -84,6 +48,7 @@ def updateSensorInfo():
 
 def getCommands():
     # global test_stop
+    global last_movement_properties
     global touch_force_max
     global last_time
     global starting_speed
@@ -137,12 +102,13 @@ def getCommands():
                  p.readUserDebugParameter(front_lean)],
                 [p.readUserDebugParameter(step_height),
                  p.readUserDebugParameter(spread), 0, 0]])
-    checkRestrictionsUniversal(last_movement_properties)
-    setMovementState(last_movement_properties[0][3], last_movement_properties[1][2])
-    walking2(last_movement_properties[0], last_movement_properties[1], last_movement_properties[2])
+    # checkRestrictionsUniversal(last_movement_properties)
+    # setMovementState(last_movement_properties[0][3], last_movement_properties[1][2])
+    # walking2(last_movement_properties[0], last_movement_properties[1], last_movement_properties[2])
 
     # makeMovementArgs(p.readUserDebugParameter(speed), p.readUserDebugParameter(turn),
     #                  p.readUserDebugParameter(cross_step), p.readUserDebugParameter(step_height))
+    makeMovementArgsLite()
     # if not test_stop:#TODO
     updateLegs()
     touch_force_max = np.array([0, 0, 0, 0])
@@ -317,37 +283,21 @@ def walking2(movement, orientation, other): #[r, cr, h, v], [sl, incl, theta, fl
     # global process_state
     global positions
     global alt_positions
-    # test_func()
 
-    correctIndividualHeights()
+    setMovementState(last_movement_properties[0][3], last_movement_properties[1][2])
+    # correctIndividualHeights()
     movement[3] = abs(movement[3])
     change_by_velocity = 1.3 - (3380 * (movement[3] + 0.0135) / 627) ** 0.5
     for i in range(4):
-        # if not grounded_legs[i] and i == 0:
-        if i == 2:
-            print(grounded_legs[2], touch_force[2], touch_force_max[2])
-        # if i == 0 and touch_force_max[0] > 0:
-            # print(legs_height_positions[0])
         if legs_height_positions[i] != 0:
-            # if i == 0:
-
             grounded_legs[i] = False
-            if touch_force[i] >= touch_threshold and legs_process_positions[i] > 0.5:
-                z = indiv_additional_heights[i]
-            else:
-                z = 0.1217395 * (0.410713 * math.sqrt(1 - (2 * legs_height_positions[i] - 1) ** 2) + 2 * other[0] * legs_height_positions[i])
+            z = 0.1217395 * (0.410713 * math.sqrt(1 - (2 * legs_height_positions[i] - 1) ** 2) + 2 * other[0] * legs_height_positions[i]) + indiv_additional_heights[i]
         else:
             grounded_legs[i] = True
             z = 0
-        # print(indiv_heights_suspended)
-        # if indiv_heights_suspended[i]:
-        #     z = indiv_additional_heights[i]
-        # else:
-        last_zs[i] = z
         if movement[0] > 0.07 and ((i < 2 and legs_process_positions[i] < 0) or (i >= 2 and legs_process_positions[i] >= 0)):
             R = 0.07
             # print(legs_process_positions[i])
-
         else:
             R = movement[0]
         x = R * 1.217395 * legs_process_positions[i]
@@ -372,6 +322,7 @@ def walking2(movement, orientation, other): #[r, cr, h, v], [sl, incl, theta, fl
         pos[0] -= 0.15 * math.tan(orientation[1])
         positions[i] = pos
         alt_positions[i] = alt_position
+        last_zs[i] = z
 
 
 def setMovementState(sp, trn):
@@ -380,12 +331,13 @@ def setMovementState(sp, trn):
     global process_monocount
     global advance_process_table
     global drift_coaf
-    if round(sp, 4) < starting_speed:#todo
-        sp = starting_speed
+    # if round(sp, 4) < starting_speed:#todo
+    #     sp = starting_speed
     if process_monocount + sp >= 1:
         # print()
         process_monocount = (process_monocount + sp) % 1
-        if round(sp, 4) > starting_speed or abs(trn) >= 0.01:#todo
+        # if round(sp, 4) > starting_speed or abs(trn) >= 0.01:#todo
+        if round(sp, 4) > 0.01 and starting_speed > 0.1: # starting speed is used as start/stop walking parameter, need to fix names todo
         # if round(sp, 4) > 0.01:
             process = 1
         else:
@@ -425,39 +377,16 @@ def correctIndividualHeights():#TODO
     global alt_positions
     global test_stop
 
-    # print("*", touch_force[0])
-    # changed = np.array([0, 0, 0, 0])
     for i in range(4):
-        # print(grounded_legs, touch_force)
-        # if not grounded_legs[i]:
         if legs_height_positions[i] == 0:
-            pass
-            # print(grounded_legs[i], touch_force[i])
-
-        #     print(touch_force[i])
-
-            # if touch_force[i] >= touch_threshold:
-            #     # test_stop = True
-            #     indiv_heights_suspended[i] = True
-            #     indiv_additional_heights[i] = last_zs[i]
-            # else:
-            #     indiv_heights_suspended[i] = False
-
-            # indiv_heights_suspended[i] = False
-            # if touch_force[i] == 0:
-            #     # changed[i] = 0
-            #     indiv_heights_suspended[i] = False
-            #     indiv_air_tick_counts[i] += 1
-            #     if indiv_air_tick_counts[i] >= indiv_air_tick_threshold:
-            #         indiv_additional_heights[i] = -1
-            # else:
-            #     indiv_air_tick_counts[i] = 0
-        # elif touch_force[i] >= touch_threshold:
-        #     # changed = 1
-        #     indiv_heights_suspended[i] = True
-
-
-
+            if touch_force[i] < touch_threshold:
+                indiv_additional_heights[i] -= 0.005
+        else:
+            indiv_additional_heights[i] += min(0.005, max(-indiv_additional_heights[i], -0.005))
+            if touch_force[i] > touch_threshold:
+                indiv_additional_heights[i] = last_zs[i]
+                print(last_zs[i])
+    print(indiv_additional_heights)
 
 
 def getLegsNormal(arr):
@@ -504,10 +433,6 @@ def getRotationMatrixFromTwoVectors(a, b):
     matrix[1][2] = -axis[0] * rsin + axis[1] * axis[2] * (1 - rcos)
     matrix[2][2] = rcos + axis[2] * axis[2] * (1 - rcos)
     return matrix
-
-
-# def dotToPlane(P, dot):
-#     return np.linalg.norm(P) / np.linalg.norm(dot)
 
 
 def streachVectorTo(v, lenght):
@@ -670,6 +595,125 @@ def balanceControl():#returns: 0 - balsnce vector; 1 - is out of perimeter; 2 - 
                                                                 acceleration, np.array([0, 1, 1]) * c), c]
         else:
             return np.array([0, 0, 0, 0, 0])
+
+
+def makeMovementArgsLite():
+    global air_tick_count
+    global after_air_tick_count
+    # global shock_tick_count
+    global instability_timer
+    global last_movement_properties
+    global last_velocity_properties
+    global base_force_vector_container
+    # global longwise_count
+    global rebound_container
+    global starting_speed
+
+    # global plot_time_left
+
+    s = shockControl()
+    f_step = last_movement_properties[0][0]
+    fl = last_movement_properties[1][3]
+    sl = last_movement_properties[1][0]
+    incl = last_movement_properties[1][1]
+    h = last_movement_properties[0][2]
+    spread = last_movement_properties[2][1]
+    speed = last_movement_properties[0][3]
+    turn = last_movement_properties[1][2]
+    step_height = last_movement_properties[2][0]
+    side_step = last_movement_properties[0][1]
+    if after_air_tick_count >= 0:
+        after_air_tick_count -= 1
+    if s[0] == -1:
+        air_tick_count += 1
+    else:
+        air_tick_count = 0
+    if air_tick_count >= 3:
+        stand_dir = np.array([-1, -1, 1]) * base_frame_orientation_matrix.dot(np.array([0, 0, 1]))
+        # speed = 0
+        starting_speed = 0
+        turn = 0
+        step_height = 0
+        side_step = 0
+        after_air_tick_count = 5
+        diff = ((-stand_dir[0] / stand_dir[2]) - incl) * 0.4
+        rebound_container[3] = checkRestricionsReb(rebound_container[3], incl, diff, 5)
+        incl += diff
+        diff = (abs(stand_dir[1] / stand_dir[2]) - spread) * 0.2
+        rebound_container[4] = checkRestricionsReb(rebound_container[4], spread, diff, 9)
+        spread += diff
+
+        print("in air")
+        if last_movement_properties[0][2] + 0.01 < 0.02:
+            diff = 0.01
+            rebound_container[0] = checkRestricionsReb(rebound_container[0], h, diff, 2)
+            h += diff
+        else:
+            diff = 0.02 - last_movement_properties[0][2]
+            rebound_container[0] = checkRestricionsReb(rebound_container[0], h, diff, 2)
+            h += diff
+        if abs(last_movement_properties[1][3]) != 0:
+            diff = -0.1 * math.atan(last_movement_properties[1][3] * 10)
+            rebound_container[1] = checkRestricionsReb(rebound_container[1], fl, diff, 7)
+            fl += diff
+        if abs(last_movement_properties[1][0]) != 0:
+            diff = -0.05 * math.atan(last_movement_properties[1][0] * 20)
+            rebound_container[2] = checkRestricionsReb(rebound_container[2], sl, diff, 4)
+            sl += diff
+    elif s[0] == 1:
+        # starting_speed = param2
+        f_force = s[2] * s[1][0]
+        s_force = s[2] * s[1][1]
+        stand_dir = np.array([-1, -1, 1]) * base_frame_orientation_matrix.dot(np.array([0, 0, -1]))
+
+        diff = ((-stand_dir[0] / stand_dir[2]) - incl) * 0.4
+        rebound_container[3] = checkRestricionsReb(rebound_container[3], incl, diff, 5)
+        incl += diff
+        diff = (abs(stand_dir[1] / stand_dir[2]) - spread) * 0.2
+        rebound_container[4] = checkRestricionsReb(rebound_container[4], spread, diff, 9)
+        spread += diff
+
+        diff = 0.1 * f_force / shock_threshold
+        rebound_container[1] = checkRestricionsReb(rebound_container[1], fl, diff, 7)
+        fl += diff
+
+        diff = 0.1 * s_force / shock_threshold
+        rebound_container[2] = checkRestricionsReb(rebound_container[2], sl, diff, 4)
+        sl += diff
+
+        diff = 0.05 * ((base_force_vector[2] / base_shock_threshold) + 1)
+        rebound_container[0] = checkRestricionsReb(rebound_container[0], h, diff, 2)
+        h += diff
+        print("shock", touch_force)
+    else:
+        # starting_speed = param2
+        rebounding_consts = np.array([0.2, 0.2, 0.25, 0.2, 0.2])  #  h fl sl incl spread
+        decr = rebounding_consts[0] * rebound_container[0]
+        rebound_container[0] -= decr
+        h -= decr
+
+        decr = rebounding_consts[1] * rebound_container[1]
+        rebound_container[1] -= decr
+        fl -= decr
+
+        decr = rebounding_consts[2] * rebound_container[2]
+        rebound_container[2] -= decr
+        sl -= decr
+
+        decr = rebounding_consts[3] * rebound_container[3]
+        rebound_container[3] -= decr
+        incl -= decr
+
+        decr = rebounding_consts[4] * rebound_container[4]
+        rebound_container[4] -= decr
+        spread -= decr
+
+
+    last_movement_properties = np.array([[f_step, side_step, h, speed], [sl, incl, turn, fl], [step_height, spread, 0, 0]])
+    checkRestrictionsUniversal(last_movement_properties)
+    # print(last_movement_properties)
+    # setMovementState(last_movement_properties[0][3], last_movement_properties[1][2])
+    walking2(last_movement_properties[0], last_movement_properties[1], last_movement_properties[2])
 
 
 def makeMovementArgs(velocity, turn, side_step, step_height):
@@ -894,98 +938,30 @@ def makeMovementArgs(velocity, turn, side_step, step_height):
 def checkRestrictionsUniversal(prop, indices=tuple(range(10))):
     i = 0
     try:
-        for pr in np.nditer(prop, op_flags = ['readwrite']):
+        for pr in np.nditer(prop, op_flags=['readwrite']):
             if pr > restrictions[1, indices[i]]:
                 pr[...] = restrictions[1, indices[i]]
             else:
                 if pr < restrictions[0, indices[i]]:
                     pr[...] = restrictions[0, indices[i]]
             i += 1
+        return prop
     except IndexError:
         return
 
 
-def checkVelocityRestrictions(prop):
-    if prop[0] > 0.3:
-        prop[0] = 0.3
+def checkRestricionsReb(prop, current_value, addition, index):
+    if current_value + addition > restrictions[1, index]:
+        addition = restrictions[1, index] - current_value
+        if addition > 0:
+            prop += addition
+    elif current_value + addition < restrictions[0, index]:
+        addition = restrictions[0, index] - current_value
+        if addition < 0:
+            prop += addition
     else:
-        if prop[0] < -0.15:
-            prop[0] = -0.15
-    if prop[1] > 0.1:
-        prop[1] = 0.1
-    else:
-        if prop[1] < -0.1:
-            prop[1] = -0.1
-    if prop[2] > 0.1:
-        prop[2] = 0.1
-    else:
-        if prop[2] < -0.1:
-            prop[2] = -0.1
-
-
-def checkRestrictions(prop):
-    if prop[0][0] > 0.1:
-        prop[0][0] = 0.1
-    else:
-        if prop[0][0] < -0.1:
-            prop[0][0] = -0.1
-    if prop[0][1] > 0.1:
-        prop[0][1] = 0.1
-    else:
-        if prop[0][1] < -0.1:
-            prop[0][1] = -0.1
-    if prop[0][2] > 0.04:
-        prop[0][2] = 0.04
-    else:
-        if prop[0][2] < -0.04:
-            prop[0][2] = -0.04
-    if prop[0][3] > 0.3:
-        prop[0][3] = 0.3
-    else:
-        if prop[0][3] < -0.15:
-            prop[0][3] = -0.15
-    if prop[1][0] > 0.5:
-        prop[1][0] = 0.5
-    else:
-        if prop[1][0] < -0.5:
-            prop[1][0] = -0.5
-    if prop[1][1] > 0.8:
-        prop[1][1] = 0.8
-    else:
-        if prop[1][1] < -0.8:
-            prop[1][1] = -0.8
-    if prop[1][2] > math.pi / 6:
-        prop[1][2] = math.pi / 6
-    else:
-        if prop[1][2] < -math.pi / 6:
-            prop[1][2] = -math.pi / 6
-    if prop[1][3] > math.pi / 9:
-        prop[1][3] = math.pi / 9
-    else:
-        if prop[1][3] < -math.pi / 9:
-            prop[1][3] = -math.pi / 9
-    if prop[2][0] > 1:
-        prop[2][0] = 1
-    else:
-        if prop[2][0] < -1:
-            prop[2][0] = -1
-    if prop[2][1] > math.pi / 6:
-        prop[2][1] = math.pi / 6
-    else:
-        if prop[2][1] < math.pi / 60:
-            prop[2][1] = math.pi / 60
-
-
-def addGroundedLines():
-    debug_lines = []
-    for i in range(len(grounded_legs)):
-        # p.addUserDebugLine(positions[clock_wise_sequence[i]], positions[clock_wise_sequence[i - 1]], [1, 0, 0], 1, 0.08)
-        if grounded_legs[i] == True:
-            p.addUserDebugLine([-positions[grounded_legs[i]][0] + base_position[0],
-              positions[grounded_legs[i]][1] + base_position[1], positions[grounded_legs[i]][2] + base_position[2]],
-              [-positions[grounded_legs[i-1]][0] + base_position[0], positions[grounded_legs[i-1]][1] + base_position[1],
-              positions[grounded_legs[i - 1]][2] + base_position[2]], [1, 0, 0], 1, 0.08)
-    p.addUserDebugLine(base_position, [base_position[0], base_position[1], 0], [0, 0, 1], 2, 0.05)
+        prop = max(restrictions[0, index], min(restrictions[1, index], prop + addition))
+    return prop
 
 
 p.connect(p.GUI)
@@ -1022,7 +998,7 @@ useMaximalCoordinates = False
 # quad = p.loadURDF("quad.xacro", [0, 0, 0], baseOrientation=p.getQuaternionFromEuler([0, 0.3, 0], 0), useFixedBase=True,
 #                   useMaximalCoordinates=useMaximalCoordinates)
 # quad = p.loadURDF("quad.xacro", [0, 0, 0], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
-quad = p.loadURDF("quad.xacro", [0, 0, 00], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
+quad = p.loadURDF("quad.xacro", [0.0, 0.0, 0.0], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
 # Getting joints indices
 nJoints = p.getNumJoints(quad)
 jointNameToId = {}
@@ -1089,14 +1065,14 @@ step_table = np.array([
     [-1,  0,   1,   0,   0,   1,   0,   0,   0,   0]
 ])
 
-acceleration = np.array([0, 0, 0])
+acceleration = np.array([0, 0, 0], dtype=np.float)
 advance_process_table = np.array([[1.0, 1.0, 2.0, 2.0], [1.0, 1.0, 2.0, 2.0]])
 after_air_tick_count = 5
 air_tick_count = 11
 alt_positions = np.array([[0.0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]])
-base_force_vector = np.array([0, 0, 0])
-base_force_vector_container = np.array([0, 0, 0])
-base_frame_orientation_matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+base_force_vector = np.array([0, 0, 0], dtype=np.float)
+base_force_vector_container = np.array([0, 0, 0], dtype=np.float)
+base_frame_orientation_matrix = np.array([[1.0, 0, 0], [0, 1, 0], [0, 0, 1]])
 base_orientation = np.array(p.getEulerFromQuaternion(p.getBasePositionAndOrientation(quad)[1]))
 base_orientation_matrix = np.zeros((3, 3))
 base_shock_threshold = 2.5
@@ -1114,20 +1090,22 @@ indiv_heights_suspended = np.array([False, False, False, False])
 instability_timer = 0
 last_movement_properties = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
 last_velocity_properties = np.array([0, 0, 0])
-last_zs = np.array([0, 0, 0, 0])
+last_zs = np.array([0.0, 0.0, 0.0, 0.0])
 legs_height_positions = np.array([0.0, 0.0, 0.0, 0.0])
 legs_process_positions = np.array([0, 0, 0, 0])
 longwise_count = 10
 old_position = np.array([0, 0, 0])
 old_velocity = np.array([0, 0, 0]) # for accelerometer
+rebound_container = np.zeros(5)
 shock_threshold = 37.8 * 1
-touch_threshold = shock_threshold / 8
+touch_threshold = shock_threshold / 16
+# touch_threshold = shock_threshold / 8
 shock_tick_count = 0
 starting_positions = np.array([[0.125, -0.065, -0.24], [0.125, 0.065, -0.24], [-0.125, -0.065, -0.24], [-0.125, 0.065, -0.24]])
 starting_speed = 0.25
 # starting_speed = 0.15
 plot_time_left = 0
-positions = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]])
+positions = np.array([[0.0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]])
 process_monocount = 0.0
 process_position = 0.0
 process_state = 0
@@ -1151,10 +1129,10 @@ side_lean = p.addUserDebugParameter("side lean", -0.5, 0.5, 0.0)
 front_lean = p.addUserDebugParameter("front lean", -math.pi / 9, math.pi / 9, 0)
 inclination = p.addUserDebugParameter("inclination", -0.8, 0.8, 0.0)
 sit_up = p.addUserDebugParameter("sit up", -0.04, 0.04, 0)
-step_height = p.addUserDebugParameter("step height", -1, 1, 0)
+step_height = p.addUserDebugParameter("step height", 0, 0.3, 0)
 spread = p.addUserDebugParameter("spread", 0, math.pi / 6, math.pi / 60)
-param = p.addUserDebugParameter("parameter", 0.02, 2, 0.02)
-param2 = p.addUserDebugParameter("parameter2", 0.1, 0.25, 0.20)
+# param = p.addUserDebugParameter("parameter", 0.02, 2, 0.02)
+param2 = p.addUserDebugParameter("parameter2", 0, 0.25, 0.1)
 
 # for j in range(0, 17):
 #     print(p.getJointInfo(quad, j)[1])
@@ -1194,5 +1172,10 @@ while 1:
     new = time.perf_counter_ns()
 
     # time.sleep(1 / 240 * 50 * p.readUserDebugParameter(param))
+    time.sleep(1/250)
     # time.sleep(abs(1/250 - (new - old) / 1000000000))
-    time.sleep(abs(1 / 250 * 50 * p.readUserDebugParameter(param) - (new - old) / 1000000000))
+    # time.sleep(1/60)
+    # time.sleep(abs(1 / 250 * 50 * p.readUserDebugParameter(param) - (new - old) / 1000000000))
+# while 1:
+#     p.stepSimulation()
+#     time.sleep(1 / 240)
