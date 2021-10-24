@@ -272,13 +272,10 @@ def shock_control():
         return [-1, np.array([0, 0]), force_container]
 
 
-def make_movement_args():
+def shock_damping():
     global air_tick_count
     global after_air_tick_count
-    global instability_timer
     global last_movement_properties
-    global last_velocity_properties
-    global base_force_vector_container
     global rebound_container
 
     f_step = last_movement_properties[0][0]
@@ -356,7 +353,7 @@ def make_movement_args():
         h += diff
         print("shock", touch_force)
     else:
-        rebounding_consts = np.array([0.2, 0.2, 0.25, 0.2, 0.2])  #  h fl sl incl spread
+        rebounding_consts = np.array([0.2, 0.2, 0.25, 0.2, 0.2])  # h fl sl incl spread
         decr = rebounding_consts[0] * rebound_container[0]
         rebound_container[0] -= decr
         h -= decr
@@ -377,8 +374,17 @@ def make_movement_args():
         rebound_container[4] -= decr
         spread -= decr
 
+    last_movement_properties = np.array(
+        [[f_step, side_step, h, speed], [sl, incl, turn, fl], [step_height, spread, 0, 0]])
 
-    last_movement_properties = np.array([[f_step, side_step, h, speed], [sl, incl, turn, fl], [step_height, spread, 0, 0]])
+
+def make_movement_args():
+    global last_movement_properties
+
+    shock_damping()
+
+
+
     check_restrictions_universal(last_movement_properties)
     walk(last_movement_properties[0], last_movement_properties[1], last_movement_properties[2])
 
@@ -513,7 +519,6 @@ state_table = np.array([[1.0, 1.0, 2.0, 2.0], [1.0, 1.0, 2.0, 2.0]])
 after_air_tick_count = 5
 air_tick_count = 11
 base_force_vector = np.array([0, 0, 0], dtype=np.float)
-base_force_vector_container = np.array([0, 0, 0], dtype=np.float)
 base_frame_orientation_matrix = np.array([[1.0, 0, 0], [0, 1, 0], [0, 0, 1]])
 base_orientation = np.array(p.getEulerFromQuaternion(p.getBasePositionAndOrientation(quad)[1]))
 base_orientation_matrix = np.zeros((3, 3))
