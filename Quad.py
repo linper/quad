@@ -182,7 +182,7 @@ def walk(movement, orientation,
             grounded_legs[i] = False
             z = 0.1217395 * (
                         0.410713 * math.sqrt(1 - (2 * legs_height_pos[i] - 1) ** 2) + 2 * other[0] * legs_height_pos[
-                    i]) + indiv_additional_heights[i]  # construct height(based on ellipse function)
+                    i]) # construct height(based on ellipse function)
         else:
             grounded_legs[i] = True  # basically the same as legs_height_pos[i] == 0:
             z = 0
@@ -532,24 +532,27 @@ restrictions = np.array([
 # finite-state machine(FSM)
 # [0-3) states: legs are on the ground(lower number means leg is further forward)
 # 3 state: leg is lifted and is traveling forwards
+#   mv1   mv2  mv3  mv4  st   it5  it6  it7  it8
 step_table = np.array([
-    [0, 1, 2, 3, 1, 2, 0.5, 1.5, 2.5, 1.5],  # current state
-    [2, 3, 0, 1, 1, 2, 2.5, 1.5, 0.5, 1.5],
-    [1, 2, 3, 0, 2, 1, 1.5, 2.5, 1.5, 0.5],
-    [3, 0, 1, 2, 2, 1, 1.5, 0.5, 1.5, 2.5],
+    [0,   1,   2,   3,   1,   2,   0.5, 1.5, 2.5],  # current state
+    [2,   3,   0,   1,   1,   2,   2.5, 1.5, 0.5],
+    [1,   2,   3,   0,   2,   1,   1.5, 2.5, 1.5],
+    [3,   0,   1,   2,   2,   1,   1.5, 0.5, 1.5],
 
-    [1, 2, 3, 0, 1.5, 2.5, 1, 2, 3, 0],  # next state if moving
-    [3, 0, 1, 2, 1.5, 0.5, 3, 0, 1, 2],
-    [2, 3, 0, 1, 2.5, 1.5, 2, 3, 0, 1],
-    [0, 1, 2, 3, 0.5, 1.5, 0, 1, 2, 3],
+#   mv2   mv3  mv4  mv1  it7  it8  mv2  mv3  mv4
+    [1,   2,   3,   0,   1.5, 2.5, 1,   2,   3],  # next state if moving
+    [3,   0,   1,   2,   1.5, 0.5, 3,   0,   1],
+    [2,   3,   0,   1,   2.5, 1.5, 2,   3,   0],
+    [0,   1,   2,   3,   0.5, 1.5, 0,   1,   2],
 
-    [0.5, 1.5, 2.5, 1.5, 1, 0.5, 1, 2, 1, 2],  # next state if stopping
-    [2.5, 1.5, 0.5, 1.5, 1, 2.5, 1, 2, 1, 2],
-    [1.5, 2.5, 1.5, 0.5, 2, 1.5, 2, 1, 2, 1],
-    [1.5, 0.5, 1.5, 2.5, 2, 1.5, 2, 1, 2, 1],
+#   it6   mv3  it8  mv1  st   it6  st   it5  st
+    [0.5, 2,   2.5, 0,   1,   0.5, 1,   2,   1],  # next state if stopping
+    [2.5, 0,   0.5, 2,   1,   2.5, 1,   2,   1],
+    [1.5, 3,   1.5, 1,   2,   1.5, 2,   1,   2],
+    [1.5, 1,   1.5, 3,   2,   1.5, 2,   1,   2],
 
-    [-1, 0, 1, 0, -1, -1, -1, 0, 1, 0],  # data for drift_coef
-    [-1, 0, 1, 0, 0, 1, 0, 0, 0, 0]
+    [-1,  0,   1,   0,   -1,  -1,  -1,  0,   1],  # data for drift_coef
+    [-1,  0,   1,   0,    0,  1,   0,   0,   0]
 ])
 
 # some constants and global variables
@@ -568,7 +571,6 @@ drift_table = np.array([0.0, 0.0])  # used with drift_coaf
 go_threshold = 0.001
 grounded_legs = np.array([False, False, False, False])
 horizontal_turn_matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-indiv_additional_heights = np.array([0, 0, 0, 0])
 last_movement_properties = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
 last_zs = np.array([0.0, 0.0, 0.0, 0.0])
 legs_height_pos = np.array([0.0, 0.0, 0.0, 0.0])
