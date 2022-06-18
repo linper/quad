@@ -8,6 +8,7 @@ from plan import DestPoint
 
 class Leg:
     def __init__(self, name, base, shoulder, knee, heel, sensor, dir, pos, off):
+        self.idx = -1
         self.name = name
         self.body = None
         self.plan = Plan(self)
@@ -17,7 +18,7 @@ class Leg:
         self.knee = knee
         self.heel = heel
         self.sensor = sensor
-        self.position = pos
+        self.position = np.array(pos)
         self.base_off = np.array(off)
         self.dir = dir
         self.sh_w = 0.02
@@ -66,8 +67,8 @@ class Leg:
     #
     #     return [alpha, beta, gama]
 
-    def get_angles(self, target_position) -> list:
-        target = np.copy(target_position)
+    def get_angles(self) -> list:
+        target = np.copy(self.position)
 
         base_st = p.getJointInfo(self.body.model, self.base)
         shoulder_st = p.getJointInfo(self.body.model, self.shoulder)
@@ -118,8 +119,8 @@ class Leg:
                 beta = shoulder_st[9]  # VI
         return [alpha, beta, gama]
 
-    def update(self, q,  cor):
-        angles = self.get_angles(cor)
+    def update(self, q):
+        angles = self.get_angles()
 
         a = p.getJointInfo(q.model, self.base)
         b = p.getJointInfo(q.model, self.shoulder)
