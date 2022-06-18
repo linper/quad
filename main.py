@@ -472,8 +472,10 @@ p.createMultiBody(0, plane)
 p.setGravity(0, 0, -10)
 useMaximalCoordinates = False
 
-model = p.loadURDF("quad2.xacro", [0.0, 0.0, 0.2], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
+# model = p.loadURDF("quad2.xacro", [0.0, 0.0, 0.2], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
 # model = p.loadURDF("quad2.xacro", [0.0, 0.0, 0.2], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
+model = p.loadURDF("quad.xacro", [0.0, 0.0, 0.2], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
+# model = p.loadURDF("quad.xacro", [0.0, 0.0, 0.2], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
 
 # Getting joints indices
 nJoints = p.getNumJoints(model)
@@ -482,39 +484,39 @@ for k in range(nJoints):
     jointInfo = p.getJointInfo(model, k)
     jointNameToId[jointInfo[1].decode('UTF-8')] = jointInfo[0]
 
-base_j = jointNameToId['front_left_base_to_shoulder']
-shoulder_j = jointNameToId['front_left_shoulder']
-knee_j = jointNameToId['front_left_knee']
-heel_j = jointNameToId['front_left_heel']
-sensor_j = jointNameToId['front_left_sensor']
+base_j = jointNameToId.get('front_left_base_to_shoulder')
+shoulder_j = jointNameToId.get('front_left_shoulder')
+knee_j = jointNameToId.get('front_left_knee')
+heel_j = jointNameToId.get('front_left_heel')
+sensor_j = jointNameToId.get('front_left_sensor')
 off = np.array(p.getJointInfo(model, base_j)[14]) * np.array([1, -1, -1])
 fll = Leg("front_left", base_j, shoulder_j, knee_j, heel_j, sensor_j, FRONT_DIR_LEFT, [0.125, -0.065, -0.24], off)
 
-base_j = jointNameToId['back_left_base_to_shoulder']
-shoulder_j = jointNameToId['back_left_shoulder']
-knee_j = jointNameToId['back_left_knee']
-heel_j = jointNameToId['back_left_heel']
-sensor_j = jointNameToId['back_left_sensor']
+base_j = jointNameToId.get('back_left_base_to_shoulder')
+shoulder_j = jointNameToId.get('back_left_shoulder')
+knee_j = jointNameToId.get('back_left_knee')
+heel_j = jointNameToId.get('back_left_heel')
+sensor_j = jointNameToId.get('back_left_sensor')
 off = np.array(p.getJointInfo(model, base_j)[14]) * np.array([1, -1, -1])
 bll = Leg("back_left", base_j, shoulder_j, knee_j, heel_j, sensor_j, BACK_DIR_LEFT, [0.125, 0.065, -0.24], off)
 
-base_j = jointNameToId['front_right_base_to_shoulder']
-shoulder_j = jointNameToId['front_right_shoulder']
-knee_j = jointNameToId['front_right_knee']
-heel_j = jointNameToId['front_right_heel']
-sensor_j = jointNameToId['front_right_sensor']
+base_j = jointNameToId.get('front_right_base_to_shoulder')
+shoulder_j = jointNameToId.get('front_right_shoulder')
+knee_j = jointNameToId.get('front_right_knee')
+heel_j = jointNameToId.get('front_right_heel')
+sensor_j = jointNameToId.get('front_right_sensor')
 off = np.array(p.getJointInfo(model, base_j)[14]) * np.array([1, -1, -1])
 frl = Leg("front_right", base_j, shoulder_j, knee_j, heel_j, sensor_j, FRONT_DIR_RIGHT, [-0.125, -0.065, -0.24], off)
 
-base_j = jointNameToId['back_right_base_to_shoulder']
-shoulder_j = jointNameToId['back_right_shoulder']
-knee_j = jointNameToId['back_right_knee']
-heel_j = jointNameToId['back_right_heel']
-sensor_j = jointNameToId['back_right_sensor']
+base_j = jointNameToId.get('back_right_base_to_shoulder')
+shoulder_j = jointNameToId.get('back_right_shoulder')
+knee_j = jointNameToId.get('back_right_knee')
+heel_j = jointNameToId.get('back_right_heel')
+sensor_j = jointNameToId.get('back_right_sensor')
 off = np.array(p.getJointInfo(model, base_j)[14]) * np.array([1, -1, -1])
 brl = Leg("back_right", base_j, shoulder_j, knee_j, heel_j, sensor_j, BACK_DIR_RIGHT, [-0.125, 0.065, -0.24], off)
 
-sensor_b = jointNameToId['base_sensor']  # we can use this as accelerometer and gyroscope
+sensor_b = jointNameToId.get('base_sensor')  # we can use this as accelerometer and gyroscope
 q: Quad = Quad(model, fll, frl, bll, brl, sensor_b)
 
 
@@ -549,12 +551,19 @@ z_par = p.addUserDebugParameter("z", -0.4, -0.1, -0.26)
 
 
 # increase grip
-for j in range(-1, 21):
-    p.changeDynamics(q.model, j, lateralFriction=2)
-    print(p.getDynamicsInfo(q.model, j))
-for j in range(0, 21, 5):
-    print(p.getJointInfo(q.model, j)[1])
-    p.enableJointForceTorqueSensor(q.model, j, 1)
+for s in q.sensors:
+    p.changeDynamics(q.model, s, lateralFriction=2)
+    print(p.getDynamicsInfo(q.model, s))
+    print(p.getJointInfo(q.model, s)[1])
+    p.enableJointForceTorqueSensor(q.model, s, 1)
+
+# increase grip
+# for j in range(-1, 21):
+#     p.changeDynamics(q.model, j, lateralFriction=2)
+#     print(p.getDynamicsInfo(q.model, j))
+# for j in range(0, 21, 5):
+#     print(p.getJointInfo(q.model, j)[1])
+#     p.enableJointForceTorqueSensor(q.model, j, 1)
 # p.enableJointForceTorqueSensor(q.model, q.front_left_leg.heel, 1)
 
 # to_starting_position()  # sets robot to starting position
