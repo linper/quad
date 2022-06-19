@@ -129,15 +129,15 @@
 
 <link name="back_right_lower">
     <visual>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </visual>
     <collision>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </collision>
     <inertial>
@@ -154,17 +154,44 @@
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 
+<link name="back_right_dampener">
+    <visual>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </visual>
+    <collision>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.025"/>
+      <inertia ixx="1.05e-4" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="1.05e-4"/>
+    </inertial>
+  </link>
+  <joint name="back_right_damp_joint" type="prismatic">
+    <axis xyz="0 0 1"/>
+    <parent link="back_right_lower"/>
+    <child link="back_right_dampener"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
+    <limit lower="0.0" upper="0.025" />
+
+  </joint>
+
   <link name="back_right_foot">
     <visual>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </visual>
      <collision>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </collision>
     <inertial>
@@ -173,9 +200,9 @@
     </inertial>
   </link>
   <joint name="back_right_sensor" type="fixed">
-    <parent link="back_right_lower"/>
+    <parent link="back_right_dampener"/>
     <child link="back_right_foot"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.063"/>
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 
@@ -262,15 +289,15 @@
 
 <link name="front_right_lower">
     <visual>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </visual>
     <collision>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </collision>
     <inertial>
@@ -287,17 +314,43 @@
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 
+<link name="front_right_dampener">
+    <visual>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </visual>
+    <collision>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.025"/>
+      <inertia ixx="1.05e-4" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="1.05e-4"/>
+    </inertial>
+  </link>
+  <joint name="front_right_damp_joint" type="prismatic">
+    <axis xyz="0 0 1"/>
+    <parent link="front_right_lower"/>
+    <child link="front_right_dampener"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
+    <limit  lower="0.0" upper="0.025" />
+  </joint>
+
   <link name="front_right_foot">
     <visual>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </visual>
      <collision>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </collision>
     <inertial>
@@ -306,9 +359,9 @@
     </inertial>
   </link>
   <joint name="front_right_sensor" type="fixed">
-    <parent link="front_right_lower"/>
+    <parent link="front_right_dampener"/>
     <child link="front_right_foot"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.063"/>
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 
@@ -395,15 +448,15 @@
 
 <link name="back_left_lower">
     <visual>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </visual>
     <collision>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </collision>
     <inertial>
@@ -420,17 +473,43 @@
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 
+<link name="back_left_dampener">
+    <visual>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </visual>
+    <collision>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.025"/>
+      <inertia ixx="1.05e-4" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="1.05e-4"/>
+    </inertial>
+  </link>
+  <joint name="back_left_damp_joint" type="prismatic">
+    <axis xyz="0 0 1"/>
+    <parent link="back_left_lower"/>
+    <child link="back_left_dampener"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
+    <limit  lower="0.0" upper="0.025" />
+  </joint>
+
 <link name="back_left_foot">
     <visual>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </visual>
      <collision>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </collision>
     <inertial>
@@ -439,9 +518,9 @@
     </inertial>
   </link>
    <joint name="back_left_sensor" type="fixed">
-    <parent link="back_left_lower"/>
+    <parent link="back_left_dampener"/>
     <child link="back_left_foot"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.063"/>
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 
@@ -528,15 +607,15 @@
 
 <link name="front_left_lower">
     <visual>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </visual>
     <collision>
-    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
       <geometry>
-        <cylinder length="0.1" radius="0.005"/>
+        <cylinder length="0.07" radius="0.005"/>
       </geometry>
     </collision>
     <inertial>
@@ -553,17 +632,43 @@
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 
+<link name="front_left_dampener">
+    <visual>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </visual>
+    <collision>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+      <geometry>
+        <cylinder length="0.025" radius="0.006"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.025"/>
+      <inertia ixx="1.05e-4" ixy="0.0" ixz="0.0" iyy="0.0" iyz="0.0" izz="1.05e-4"/>
+    </inertial>
+  </link>
+  <joint name="front_left_damp_joint" type="prismatic">
+    <axis xyz="0 0 1"/>
+    <parent link="front_left_lower"/>
+    <child link="front_left_dampener"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.035"/>
+    <limit  lower="0.0" upper="0.025" />
+  </joint>
+
 <link name="front_left_foot">
     <visual>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </visual>
      <collision>
     <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.006"/>
+        <sphere radius="0.007"/>
       </geometry>
     </collision>
     <inertial>
@@ -572,9 +677,9 @@
     </inertial>
   </link>
    <joint name="front_left_sensor" type="fixed">
-    <parent link="front_left_lower"/>
+    <parent link="front_left_dampener"/>
     <child link="front_left_foot"/>
-    <origin rpy="0 0 0" xyz="0 0 -0.1"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.063"/>
     <joint_properties damping="0.0" friction="0.05"/>
   </joint>
 

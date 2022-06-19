@@ -2,6 +2,8 @@ from tkinter import *
 import numpy as np
 from leg import Leg
 from quad import Quad
+from consts import *
+
 
 class GrView:
     def __init__(self, q):
@@ -20,22 +22,62 @@ class GrView:
         # self.params.grid(row=1, column=0)
         # self.params.pack()
 
-    def draw_leg_circle(self, leg, color):
+    def draw_leg_circle(self, leg):
+        force = self.q.sens_info.touch_force[leg.idx]
+
+        if force > 0:
+            color = "green"
+        else:
+            color = "red"
+
         r = 6
         pt = self.mul * leg.position * np.array([-1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
-        # pt = self.mul * (leg.position + leg.base_off) * np.array([-1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
         self.space.create_oval(pt[1] - r, pt[0] - r, pt[1] + r, pt[0] + r, fill=color)
 
+    def draw_circle(self, pos, color):
+        r = 6
+        self.space.create_oval(pos[1] - r, pos[0] - r, pos[1] + r, pos[0] + r, fill=color)
+
+    def draw_force(self):
+        force = np.copy(self.q.sens_info.base_force_vector)
+        force = force / np.linalg.norm(force)
+        r = 6
+        pt = 0.1 * self.mul * force * np.array([-1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+        self.space.create_oval(pt[1] - r, pt[0] - r, pt[1] + r, pt[0] + r, fill="blue")
+
+    def draw_perimeter(self):
+        found_first = False
+        last: Leg
+        for i in range(-1, len(self.q.legs)):
+            cur = self.q.legs[clock_wise_sequence[i]]
+            f = self.q.sens_info.touch_force[cur.idx]
+            if f == 0:
+                continue
+
+            if not found_first:
+                last = cur
+                found_first = True
+                continue
+
+            lpt = self.mul * last.position * np.array([-1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+            cpt = self.mul * cur.position * np.array([-1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+
+            self.space.create_line(lpt[1], lpt[0], cpt[1], cpt[0], width=4, fill="green")
+            self.space.pack()
+            last = cur
 
     def update(self):
         self.root.update()
 
         self.space.delete("all")
 
+        self.draw_circle(np.array([self.height / 2, self.width / 2]), "black")
+        self.draw_perimeter()
+
         for l in self.q.legs:
-            self.draw_leg_circle(l, "green")
-            # self.space.create_oval(mid_x -10, mid_y -10, mid_x +10, mid_y +10)
-            # self.space.create_oval(mid_x + 100 * l.position[0], mid_y + 100 * l.position[1])
+            self.draw_leg_circle(l)
+
+        self.draw_force()
 
 
 

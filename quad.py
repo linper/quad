@@ -8,12 +8,13 @@ class SensInfo():
     def __init__(self):
         self.base_position = None
         self.base_force_vector = None
-        self.touch_force = None
+        self.touch_force = np.zeros(4, dtype=int)
         self.base_orientation_matrix = None
         self.base_frame_orientation_matrix = None
         self.base_orientation = None
         self.base_position = None
         self.horizontal_turn_matrix = None
+
 
 class Quad:
     def __init__(self, model, fll, frl, bll, brl, sensor):
@@ -61,9 +62,10 @@ class Quad:
         for i in range(9):
             base_orientation_matrix[i // 3][i % 3] = base_orientation_1d[i]
         self.sens_info.base_frame_orientation_matrix = self.get_base_frame_orientation_matrix()
-        self.sens_info.touch_force = touch_force_max
-        for i in range(4):
-            touch_force_max[i] = max(-p.getJointState(self.model, self.sensors[i])[2][2], touch_force_max[i])
+        # self.sens_info.touch_force = touch_force_max
+        for i in range(len(self.legs)):
+            self.sens_info.touch_force[i] = -p.getJointState(self.model, self.sensors[i])[2][2]
+            # touch_force_max[i] = max(-p.getJointState(self.model, self.sensors[i])[2][2], touch_force_max[i])
 
     def to_starting_position(self):
         # global positions
@@ -71,16 +73,16 @@ class Quad:
         p.setJointMotorControl2(self.model, self.front_left_leg.base, p.POSITION_CONTROL, -0.08354599985540861)
         p.setJointMotorControl2(self.model, self.front_left_leg.shoulder, p.POSITION_CONTROL, -0.7116395204323857)
         p.setJointMotorControl2(self.model, self.front_left_leg.knee, p.POSITION_CONTROL, 1.423279103830849)
-        # p.setJointMotorControl2(self.model, self.front_left_leg.heel, p.POSITION_CONTROL, -1.423279103830849)
+        p.setJointMotorControl2(self.model, self.front_left_leg.heel, p.POSITION_CONTROL, -1.423279103830849)
         p.setJointMotorControl2(self.model, self.back_left_leg.base, p.POSITION_CONTROL, -0.08354599985540861)
         p.setJointMotorControl2(self.model, self.back_left_leg.shoulder, p.POSITION_CONTROL, 0.7116395204323857)
         p.setJointMotorControl2(self.model, self.back_left_leg.knee, p.POSITION_CONTROL, -1.423279103830849)
-        # p.setJointMotorControl2(self.model, self.back_left_leg.heel, p.POSITION_CONTROL, 1.423279103830849)
+        p.setJointMotorControl2(self.model, self.back_left_leg.heel, p.POSITION_CONTROL, 1.423279103830849)
         p.setJointMotorControl2(self.model, self.front_right_leg.base, p.POSITION_CONTROL, 0.08354599985540861)
         p.setJointMotorControl2(self.model, self.front_right_leg.shoulder, p.POSITION_CONTROL, -0.7116395204323857)
         p.setJointMotorControl2(self.model, self.front_right_leg.knee, p.POSITION_CONTROL, 1.423279103830849)
-        # p.setJointMotorControl2(self.model, self.front_right_leg.heel, p.POSITION_CONTROL, -1.423279103830849)
+        p.setJointMotorControl2(self.model, self.front_right_leg.heel, p.POSITION_CONTROL, -1.423279103830849)
         p.setJointMotorControl2(self.model, self.back_right_leg.base, p.POSITION_CONTROL, 0.08354599985540861)
         p.setJointMotorControl2(self.model, self.back_right_leg.shoulder, p.POSITION_CONTROL, 0.7116395204323857)
         p.setJointMotorControl2(self.model, self.back_right_leg.knee, p.POSITION_CONTROL, -1.423279103830849)
-        # p.setJointMotorControl2(self.model, self.back_right_leg.heel, p.POSITION_CONTROL, 1.423279103830849)
+        p.setJointMotorControl2(self.model, self.back_right_leg.heel, p.POSITION_CONTROL, 1.423279103830849)
