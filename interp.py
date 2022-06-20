@@ -189,3 +189,60 @@ def connect_times(t):
         else:
             visible_y.extend(time_steps[1:])
     return visible_y
+
+
+def get_legs_normal(arr):
+    has_normal = False
+    for i in range(4):
+        if not grounded_legs[clock_wise_sequence[i]] or not grounded_legs.__contains__(False):
+            a = np.array(arr[clock_wise_sequence[i - 1]]) - np.array(
+                arr[clock_wise_sequence[i - 2]])
+            b = np.array(arr[clock_wise_sequence[i - 1]]) - np.array(
+                arr[clock_wise_sequence[i - 3]])
+            c = get_cross_product(b, a) * np.array([-1, -1, 1])
+            return np.array([1, -1, 1]) * strech_vector_to(c, 1)
+    if not has_normal:
+        return np.array([0, 0, -1])
+
+
+def get_vectors_cosine(a, b):
+    if np.linalg.norm(a) * np.linalg.norm(b) == 0:
+        return 0
+    else:
+        return (np.dot(a, b)) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+
+def get_cross_product(a, b):
+    return np.cross(np.array(a), np.array(b))
+    # return np.array([a[1] * b[2] - a[2] * b[1],  a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
+
+
+def get_rotation_matrix_from_two_vectors(a, b):
+    a = strech_vector_to(a, 1)
+    b = strech_vector_to(b, 1)
+    phi = math.acos(get_vectors_cosine(a, b))
+    axis = strech_vector_to(get_cross_product(a, b), 1)
+    matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+    rcos = math.cos(phi)
+    rsin = math.sin(phi)
+    matrix[0][0] = rcos + axis[0] * axis[0] * (1 - rcos)
+    matrix[1][0] = axis[2] * rsin + axis[1] * axis[0] * (1 - rcos)
+    matrix[2][0] = -axis[1] * rsin + axis[2] * axis[0] * (1 - rcos)
+    matrix[0][1] = -axis[2] * rsin + axis[0] * axis[1] * (1 - rcos)
+    matrix[1][1] = rcos + axis[1] * axis[1] * (1 - rcos)
+    matrix[2][1] = axis[0] * rsin + axis[2] * axis[1] * (1 - rcos)
+    matrix[0][2] = axis[1] * rsin + axis[0] * axis[2] * (1 - rcos)
+    matrix[1][2] = -axis[0] * rsin + axis[1] * axis[2] * (1 - rcos)
+    matrix[2][2] = rcos + axis[2] * axis[2] * (1 - rcos)
+    return matrix
+
+
+def strech_vector_to(v, lenght):
+    if np.linalg.norm(v) != 0:
+        return v * (lenght / np.linalg.norm(v))
+    else:
+        return np.array([0, 0, 0])
+
+
+def vector_projection(from_vec, to_vec):
+    return (np.dot(from_vec, to_vec)) / np.linalg.norm(to_vec)

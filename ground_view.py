@@ -1,13 +1,15 @@
+import math
 from tkinter import *
 import numpy as np
 from leg import Leg
 from quad import Quad
 from consts import *
-
+from interp import *
+import functools
 
 class GrView:
-    def __init__(self, q):
-        self.q = q
+    def __init__(self, q: Quad):
+        self.q: Quad = q
         self.root = Tk()
         self.mul = 800
         self.height = 800
@@ -45,6 +47,30 @@ class GrView:
         pt = 0.1 * self.mul * force * np.array([-1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
         self.space.create_oval(pt[1] - r, pt[0] - r, pt[1] + r, pt[0] + r, fill="blue")
 
+        res_arr = []
+        legs = self.q.legs
+        for i in range(4):
+            if self.q.sens_info.touch_force[clock_wise_sequence[i]] != 0 and \
+                    self.q.sens_info.touch_force[clock_wise_sequence[i - 1]] != 0 and \
+                    self.q.sens_info.touch_force[clock_wise_sequence[i - 2]] != 0:
+                la: Leg = legs[clock_wise_sequence[i]]
+                lb: Leg = legs[clock_wise_sequence[i - 1]]
+                lc: Leg = legs[clock_wise_sequence[i - 2]]
+                ba = lb.position - la.position
+                bc = lb.position - lc.position
+                norm = get_cross_product(ba, bc)
+                norm = strech_vector_to(norm, 1.0)
+                d = -1 * np.sum(lb.position * norm)
+                mult = -d * np.sum(norm * force)
+                res = mult * force
+                res_mod = self.mul * res * np.array([-1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+                res_arr.append(res_mod)
+
+        if len(res_arr) > 0:
+            reduced = functools.reduce(lambda a, b: a + b, res_arr) / len(res_arr)
+            self.draw_circle(reduced, "orange")
+
+
     def draw_perimeter(self):
         found_first = False
         last: Leg
@@ -78,6 +104,3 @@ class GrView:
             self.draw_leg_circle(l)
 
         self.draw_force()
-
-
-

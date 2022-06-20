@@ -27,7 +27,7 @@ class Leg:
         self.sh_h = 0.03
         self.link_len = 0.1
         self.damp_len = 0.025
-        self.stiffness_c = 4.0
+        self.stiffness_c = 2.5
 
     def get_angles(self) -> list:
         target = np.copy(self.position) - self.base_off
