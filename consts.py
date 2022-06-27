@@ -62,11 +62,10 @@ base_frame_orientation_matrix = np.array([[1.0, 0, 0], [0, 1, 0], [0, 0, 1]])
 
 base_orientation_matrix = np.zeros((3, 3))
 base_shock_threshold = 2.5
-clock_wise_sequence = [0, 1, 3, 2]
+cw_seq = [0, 1, 3, 2]
 drift_coaf = 0  # shows how much bot leans to side at certain time
 drift_table = np.array([0.0, 0.0])  # used with drift_coaf
 go_threshold = 0.001
-grounded_legs = np.array([False, False, False, False])
 horizontal_turn_matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 last_movement_properties = np.array([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
 last_zs = np.array([0.0, 0.0, 0.0, 0.0])

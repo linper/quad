@@ -25,7 +25,11 @@ def fill_diffs(lst):
 
 
 def line_cof(x1, y1, x2, y2):
-    k = (y2 - y1) / (x2 - x1)
+    fi = 0.0
+    if x2 == x1:
+        fi = 0.0000001
+
+    k = (y2 - y1) / (x2 - x1 + fi)
     b = y1 - k * x1
     return k, b
 
@@ -191,18 +195,18 @@ def connect_times(t):
     return visible_y
 
 
-def get_legs_normal(arr):
-    has_normal = False
-    for i in range(4):
-        if not grounded_legs[clock_wise_sequence[i]] or not grounded_legs.__contains__(False):
-            a = np.array(arr[clock_wise_sequence[i - 1]]) - np.array(
-                arr[clock_wise_sequence[i - 2]])
-            b = np.array(arr[clock_wise_sequence[i - 1]]) - np.array(
-                arr[clock_wise_sequence[i - 3]])
-            c = get_cross_product(b, a) * np.array([-1, -1, 1])
-            return np.array([1, -1, 1]) * strech_vector_to(c, 1)
-    if not has_normal:
-        return np.array([0, 0, -1])
+# def get_legs_normal(arr):
+#     has_normal = False
+#     for i in range(4):
+#         if not grounded_legs[cw_seq[i]] or not grounded_legs.__contains__(False):
+#             a = np.array(arr[cw_seq[i - 1]]) - np.array(
+#                 arr[cw_seq[i - 2]])
+#             b = np.array(arr[cw_seq[i - 1]]) - np.array(
+#                 arr[cw_seq[i - 3]])
+#             c = get_cross_product(b, a) * np.array([-1, -1, 1])
+#             return np.array([1, -1, 1]) * strech_vector_to(c, 1)
+#     if not has_normal:
+#         return np.array([0, 0, -1])
 
 
 def get_vectors_cosine(a, b):

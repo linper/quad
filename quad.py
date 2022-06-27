@@ -3,41 +3,53 @@ from consts import *
 import pybullet as p
 import numpy as np
 import math
+import functools
+from enum import IntEnum
+from interp import *
 
-class SensInfo():
-    def __init__(self):
-        self.base_position = None
-        self.base_force_vector = None
+
+class TouchState(IntEnum):
+    PT3 = 0
+    PT2 = 1
+    PT1 = 2
+    PT0 = 3
+
+
+t_state_color_tbl = {
+    TouchState.PT3: "green",
+    TouchState.PT2: "yellow",
+    TouchState.PT1: "orange",
+    TouchState.PT0: "red",
+}
+
+
+class TForceInfo:
+    def __init__(self, pos: np.ndarray, state: TouchState):
+        self.pos = pos
+        self.type: TouchState = state
+        self.color: str = t_state_color_tbl[state]
+
+
+class SensInfo:
+    def __init__(self, q):
+        self.host: Quad = q
         self.touch_force = np.zeros(4, dtype=int)
+        self.base_force_vector = np.zeros(3, dtype=float)
+        self.bf_hist = [np.zeros(3, dtype=float)]
+        self.bf_max = 35
         self.base_orientation_matrix = None
         self.base_frame_orientation_matrix = None
-        self.base_orientation = None
-        self.base_position = None
+        self.base_orientation = [np.zeros(4, dtype=float)]
+        self.base_position = [np.zeros(3, dtype=float)]
         self.horizontal_turn_matrix = None
-
-
-class Quad:
-    def __init__(self, model, fll, frl, bll, brl, sensor):
-        self.model = model
-        self.sens_info = SensInfo()
-        self.sensor = sensor
-        self.front_left_leg: Leg = fll
-        self.front_right_leg: Leg = frl
-        self.back_left_leg: Leg = bll
-        self.back_right_leg: Leg = brl
-
-        self.legs = [fll, frl, bll, brl]
-        self.sensors = [fll.sensor, frl.sensor, bll.sensor, brl.sensor, sensor]
-
-        for i, l in enumerate(self.legs):
-            l.idx = i
-            l.body = self
+        self.t_force_info: TForceInfo = TForceInfo(np.zeros(3, dtype=float), TouchState.PT0)
+        self.s_center = np.zeros(3, dtype=float)
+        self.to_s_closest = np.zeros(3, dtype=float)
 
     # # some math, nothing to see here
     def get_base_frame_orientation_matrix(self):
         for i in range(4):
-            if grounded_legs[clock_wise_sequence[i]] and grounded_legs[clock_wise_sequence[i - 1]] and \
-                    grounded_legs[clock_wise_sequence[i - 2]]:
+            if self.host.legs_cw[i] and self.host.legs_cw[i - 1] and self.host.legs_cw[i - 2]:
                 forward = np.array([-1, 0, 0])
                 X = base_orientation_matrix.dot(forward)
                 if X[0] <= 0:
@@ -48,24 +60,148 @@ class Quad:
                 horizontal_turn_m = np.zeros((3, 3))
                 for j in range(9):
                     horizontal_turn_m[j // 3][j % 3] = h[j]
-                self.sens_info.horizontal_turn_matrix = horizontal_turn_m.copy()
+                self.horizontal_turn_matrix = horizontal_turn_m.copy()
                 new_matrix = np.matmul(horizontal_turn_m, base_orientation_matrix)
                 return new_matrix
         return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
+    def update_s(self):
+        t_pos = []
+        l: Leg
+        for i in range(-1, len(self.host.legs)-1):
+            l = self.host.legs[cw_seq[i]]
+            if self.touch_force[l.idx] > 0:
+                t_pos.append(l.position)
+
+        if len(t_pos) == 0:
+            return
+
+        center = functools.reduce(lambda a, b: a + b, t_pos) / len(t_pos)
+        self.s_center = center
+        # l1: Leg = self.host.legs[0]
+        # l2: Leg = self.host.legs[1]
+        # found = False
+        #
+        # for i in range(-2, len(self.host.legs) - 2):
+        #     l1 = self.host.legs[i]
+        #     l2 = self.host.legs[i + 1]
+        #     itc, _, _ = sect_intersect(l1.position[0], l1.position[1], l2.position[0], l2.position[1], center[0], center[1], self.t_force_info.pos[0], self.t_force_info.pos[1])
+        #     if itc:
+        #         found = True
+        #         break
+        #
+        # if not found:
+        #     return
+        #
+        # len_to_c = np.linalg.norm(self.t_force_info.pos - center)
+        # k, b = line_cof(l1.position[0], l1.position[1], l2.position[0], l2.position[1])
+        # k_tr = -1 / k
+        # perp_vect = np.array([1.0, k_tr + b, 0.0])  # kx + b when x is 1
+        # perp_vect = strech_vector_to(perp_vect, len_to_c)
+        # perp_mod = self.t_force_info.pos + perp_vect
+        # itc, x, y = sect_intersect(l1.position[0], l1.position[1], l2.position[0], l2.position[1], center[0], center[1], perp_mod[0], perp_mod[1])
+        # if itc:
+        #     self.to_s_closest = np.array([x, y, self.t_force_info.pos[2]]) - self.t_force_info.pos
+        # else:
+        #     self.to_s_closest = np.zeros(3, dtype=float)
+
+    def update_t_force(self):
+        force = np.copy(self.host.sens_info.base_force_vector)
+        if np.linalg.norm(force) != 0:
+            force = force / np.linalg.norm(force)
+
+        res_arr = []
+        state_arr = []
+        legs = self.host.legs_cw
+        state = TouchState.PT0
+        for i in range(4):
+            la: Leg = legs[i]
+            lb: Leg = legs[i - 1]
+            lc: Leg = legs[i - 2]
+            ba = lb.position - la.position
+            bc = lb.position - lc.position
+            norm = get_cross_product(bc, ba)
+            # norm = strech_vector_to(norm, 1.0)
+            d = -1 * np.sum(lb.position * norm)
+            f_sum = np.sum(norm * force)
+            mult = -d / (f_sum if f_sum else 1)
+            res = mult * force
+            res_arr.append(res)
+
+            f0 = self.touch_force[cw_seq[i]]
+            f1 = self.touch_force[cw_seq[i - 1]]
+            f2 = self.touch_force[cw_seq[i - 2]]
+
+            if f0 > 0.0 and f1 > 0.0 and f2 > 0.0:
+                state_arr.append(TouchState.PT3)
+            elif f1 > 0.0 and (f0 > 0.0 or f2 > 0.0):
+                state_arr.append(TouchState.PT2)
+            elif f0 > 0.0 or f1 > 0.0 or f2 > 0.0:
+                state_arr.append(TouchState.PT1)
+            else:
+                state_arr.append(TouchState.PT0)
+
+        if TouchState.PT3 in state_arr:
+            reduced_arr = [j for i, j in zip(state_arr, res_arr) if i == TouchState.PT3]
+            state = TouchState.PT3
+        elif TouchState.PT2 in state_arr:
+            reduced_arr = [j for i, j in zip(state_arr, res_arr) if i == TouchState.PT2]
+            state = TouchState.PT2
+        elif TouchState.PT1 in state_arr:
+            reduced_arr = [j for i, j in zip(state_arr, res_arr) if i == TouchState.PT1]
+            state = TouchState.PT1
+        else:
+            reduced_arr = res_arr
+
+        if len(res_arr) > 0:
+            reduced = functools.reduce(lambda a, b: a + b, reduced_arr) / len(reduced_arr)
+            self.t_force_info = TForceInfo(reduced, state)
+
+
+class Quad:
+    def __init__(self, model, fll, frl, bll, brl, sensor):
+        self.model = model
+        self.sens_info = SensInfo(self)
+        self.sensor = sensor
+        self.front_left_leg: Leg = fll
+        self.front_right_leg: Leg = frl
+        self.back_left_leg: Leg = bll
+        self.back_right_leg: Leg = brl
+
+        self.legs = [fll, frl, bll, brl]
+        self.legs_cw = [fll, frl, brl, bll]
+        self.sensors = [fll.sensor, frl.sensor, bll.sensor, brl.sensor, sensor]
+
+        for i, l in enumerate(self.legs):
+            l.idx = i
+            l.body = self
+
+        for i in range(-1, len(self.legs_cw) - 1):
+            self.legs_cw[i].prev = self.legs_cw[i-1]
+            self.legs_cw[i].next = self.legs_cw[i+1]
+
+
     # gets info from sensors
     def update_sensor_info(self):
         self.sens_info.base_position = np.array(p.getBasePositionAndOrientation(self.model)[0])
-        self.sens_info.base_force_vector = -np.array(p.getJointState(self.model, self.sensor)[2][slice(3)])
-        self.sens_info.base_orientation = np.array(p.getEulerFromQuaternion(p.getBasePositionAndOrientation(self.model)[1]))
+        self.sens_info.base_orientation = np.array(
+            p.getEulerFromQuaternion(p.getBasePositionAndOrientation(self.model)[1]))
         base_orientation_1d = np.array(p.getMatrixFromQuaternion(p.getBasePositionAndOrientation(self.model)[1]))
         for i in range(9):
             base_orientation_matrix[i // 3][i % 3] = base_orientation_1d[i]
-        self.sens_info.base_frame_orientation_matrix = self.get_base_frame_orientation_matrix()
-        # self.sens_info.touch_force = touch_force_max
-        for i in range(len(self.legs)):
-            self.sens_info.touch_force[i] = -p.getJointState(self.model, self.sensors[i])[2][2]
-            # touch_force_max[i] = max(-p.getJointState(self.model, self.sensors[i])[2][2], touch_force_max[i])
+        self.sens_info.base_frame_orientation_matrix = self.sens_info.get_base_frame_orientation_matrix()
+        for i, l in enumerate(self.legs):
+            self.sens_info.touch_force[l.idx] = -p.getJointState(self.model, l.sensor)[2][2]
+
+        b_force = -np.array(p.getJointState(self.model, self.sensor)[2][slice(3)])
+        if len(self.sens_info.bf_hist) >= self.sens_info.bf_max:
+            self.sens_info.bf_hist.pop(0)
+
+        self.sens_info.bf_hist.append(b_force)
+        self.sens_info.base_force_vector = functools.reduce(lambda a, b: a + b, self.sens_info.bf_hist) / len(
+            self.sens_info.bf_hist)
+        self.sens_info.update_t_force()
+        self.sens_info.update_s()
 
     def to_starting_position(self):
         # global positions

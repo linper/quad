@@ -8,6 +8,8 @@ from plan import DestPoint
 
 class Leg:
     def __init__(self, name, base, shoulder, knee, heel, damp, sensor, dir, pos, off):
+        self.next = None
+        self.prev = None
         self.idx = -1
         self.name = name
         self.body = None
@@ -22,11 +24,12 @@ class Leg:
         self.position = np.array(pos)
         self.def_pos = np.array(pos)
         self.base_off = np.array(off)
+        self.grounded = True
         self.dir = dir
         self.sh_w = 0.02
         self.sh_h = 0.03
         self.link_len = 0.1
-        self.damp_len = 0.025
+        self.damp_len = 0.012
         self.stiffness_c = 2.5
 
     def get_angles(self) -> list:
@@ -43,7 +46,7 @@ class Leg:
         elif base_st[9] < gama:
             gama = base_st[9]
             target[1] = -target[2] * math.tan(gama)
-        shoulder_position = np.array([self.dir[1] * 0.025, (0.03 * math.sin(gama) + self.dir[2] * 0.01 * math.cos(gama)),
+        shoulder_position = np.array([0.0, (0.03 * math.sin(gama) + self.dir[2] * 0.01 * math.cos(gama)),
                                       (-0.03 * math.cos(gama) + self.dir[2] * 0.01 * math.sin(gama))])
         target = target - shoulder_position
         leg_length = np.linalg.norm(target)
