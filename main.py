@@ -21,24 +21,13 @@ def get_commands():
         got_target = True
 
     q.update_sensor_info()
-
-    # if got_target:
-    #     q.set_target(arr)
-    #
-    # cor = q.set_step()
-
-    st_st_val = p.readUserDebugParameter(start_stop_param)
-    cor = np.array([p.readUserDebugParameter(x_par),
-         p.readUserDebugParameter(y_par),
-         p.readUserDebugParameter(z_par)])
-
+    if got_target:
+        q.set_target(arr)
 
 
     for l in q.legs:
-        if round(st_st_val, 3) == 0:
-            l.position = l.def_pos + l.base_off
-        else:
-            l.position = cor + l.def_pos + l.base_off
+        # if got_target:
+        l.fsm.execute()
         l.update(q)
 
     while q_to_gv.full():
@@ -116,23 +105,8 @@ base_orientation = np.array(p.getEulerFromQuaternion(p.getBasePositionAndOrienta
 base_position = np.array(p.getBasePositionAndOrientation(q.model)[0])
 touch_force_max = np.array([0, 0, 0, 0])
 
-# setting manual parameters for debugging
-# speed = p.addUserDebugParameter("speed", -0.15, 0.3, 0)
-# step = p.addUserDebugParameter("step", -0.1, 0.1, 0)
-# cross_step = p.addUserDebugParameter("cross step", -0.1, 0.1, 0)
-# turn = p.addUserDebugParameter("turn", -0.5235988, 0.5235988, 0)
-# side_lean = p.addUserDebugParameter("side lean", -0.5, 0.5, 0.0)
-# front_lean = p.addUserDebugParameter("front lean", -math.pi / 9, math.pi / 9, 0)
-# inclination = p.addUserDebugParameter("inclination", -0.8, 0.8, 0.0)
-# sit_up = p.addUserDebugParameter("sit up", -0.04, 0.04, 0)
-# step_height = p.addUserDebugParameter("step height", 0, 0.3, 0)
-# spread = p.addUserDebugParameter("spread", 0, math.pi / 6, math.pi / 60)
-
 start_stop_param = p.addUserDebugParameter("stop/go", 0, 0.001, 0.)
 
-# alpha_par = p.addUserDebugParameter("alpha", -2.617993877991494, -0.52359877559829884, -1.5707)
-# beta_par = p.addUserDebugParameter("beta", -math.pi/2, math.pi/2, 0)
-# gama_par = p.addUserDebugParameter("gama", -math.pi/2, math.pi/2, 0)
 x_par = p.addUserDebugParameter("x", -0.3, 0.3, 0)
 y_par = p.addUserDebugParameter("y", -0.2, 0.2, 0.0)
 z_par = p.addUserDebugParameter("z", -0.25, 0.2, 0.0)

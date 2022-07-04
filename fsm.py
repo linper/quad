@@ -73,10 +73,11 @@ class FSM:
 
     def execute(self):
         self.leg.plan.log.targets.append(self.leg.plan.target)
-        while self.cur != FSMState.PENDING:
+        if self.cur != FSMState.PENDING:
             self.func[self.cur]()
+            if self.cur == FSMState.PENDING:
+                print("Pending")
 
-        print("Pending")
 
     def act_stopped(self):
         pass
@@ -95,16 +96,18 @@ class FSM:
             end_time = TOP_TM_C * (p.target.t - start.t)
 
             end = DestPoint(
-                (start.x + END_OF_C * (p.target.x - start.x)),
-                MAX_HEIGHT,
-                end_time, None, 0.0)
+                [(start.x + END_OF_C * (p.target.x - start.x)),
+                (start.y + END_OF_C * (p.target.y - start.y)),
+                MAX_HEIGHT],
+                end_time, None, None, 0.0)
 
             self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(DestPoint(
-                (start.x + MID_OF_C * (p.target.x - start.x)),
-                start.y + MID_PT_HT_C * (MAX_HEIGHT - start.y),
+                [start.x + MID_OF_C * (p.target.x - start.x),
+                start.y + MID_OF_C * (p.target.y - start.y),
+                start.z + MID_PT_HT_C * (MAX_HEIGHT - start.z)],
                 end_time / 2))
             p.points.append(end)
 
@@ -129,14 +132,15 @@ class FSM:
         if p.need_plan:
             print("Descending")
             start = p.cur.clone()
-            end = DestPoint(p.target.x, p.target.y, p.target.t, 0)
+            end = DestPoint([p.target.x, p.target.y, p.target.z], p.target.t, 0)
 
             self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(DestPoint(
-                start.x + PRE_LAND_PT_OF_C * (p.target.x - start.x),
-                end.y + PRE_LAND_PT_HT_C * (MAX_HEIGHT - end.y),
+                [start.x + PRE_LAND_PT_OF_C * (p.target.x - start.x),
+                start.y + PRE_LAND_PT_OF_C * (p.target.y - start.y),
+                end.z + PRE_LAND_PT_HT_C * (MAX_HEIGHT - end.z)],
                 start.t + PRE_LAND_PT_TM_C * (p.target.t - start.t)))
             p.points.append(end)
 
@@ -164,9 +168,9 @@ class FSM:
             print("Landing")
             start = p.cur.clone()
             start.t = 0
-            dy = abs(p.last.y - p.cur.y)
+            dz = abs(p.last.z - p.cur.z)
             dt = abs(p.last.t - p.cur.t)
-            end = DestPoint(p.target.x, MAX_DIP, abs(start.y - MAX_DIP) * dy / dt)
+            end = DestPoint([p.target.x, p.target.y, MAX_DIP], abs(start.z - MAX_DIP) * dz / dt)
 
             self.leg.plan.log.points.append(end)
 
@@ -193,10 +197,11 @@ class FSM:
         if p.need_plan:
             print("Traversing")
             start = p.cur.clone()
-            start.t = 0
-            start.dx = 0
-            start.dy = 0
-            end = DestPoint(p.target.x, p.target.y, p.target.t, 0.0, 0.0)
+            start.t = 0.0
+            start.dx = 0.0
+            start.dy = 0.0
+            start.dz = 0.0
+            end = DestPoint([p.target.x, p.target.y, p.target.z], p.target.t, 0.0, 0.0, 0.0)
 
             self.leg.plan.log.points.append(end)
 
@@ -218,7 +223,7 @@ class FSM:
             p.reset()
             self.next(FSMAction.DROP)
         elif ADJUST_SENS < abs(adj):
-            p.adjust(0, adj)
+            p.adjust(0, 0, adj)
             p.step()
         else:
             p.step()
@@ -230,9 +235,7 @@ class FSM:
             print("Dropping")
             start = p.cur.clone()
             start.t = 0.0
-            # dy = abs(p.last.y - p.cur.y)
-            # dt = abs(p.last.t - p.cur.t)
-            end = DestPoint(p.cur.x, MAX_DIP, drop_time(start.y))
+            end = DestPoint([p.cur.x, p.cur.y, MAX_DIP], drop_time(start.z))
 
             self.leg.plan.log.points.append(end)
 

@@ -27,6 +27,7 @@ class GrView:
         self.mul = 800
         self.height = 800
         self.width = 600
+        self.path_sent = False
         self.root.title = "ground view"
         self.space = Canvas(self.root, background="white", height=self.height, width=self.width)
         self.space.bind("<Button-1>", self.btn_clk)
@@ -96,10 +97,13 @@ class GrView:
 
     def send_go_cmd(self):
         while self.q_to.full():
+            print("GV queue is full, sleeping...")
             time.sleep(0.05)
 
         print("Go")
-        self.q_to.put(self.saved)
+        saved_adj = [(np.array([s.y, s.x, -0.2 * self.mul]) - np.array([self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
+        self.q_to.put(saved_adj)
+        self.path_sent = True
         # s = SPoint(ev.x, ev.y, new_path_col)
         # self.saved.append(s)
         # self.draw_circle2(s)
@@ -108,6 +112,10 @@ class GrView:
         new_path_col = "blue"
         # print("clicked")
         s = SPoint(ev.x, ev.y, new_path_col)
+        if self.path_sent:
+            self.path_sent = False
+            self.saved.clear()
+
         self.saved.append(s)
         self.draw_circle2(s)
 
@@ -138,6 +146,7 @@ class GrView:
         q: Quad
         while True:
             if self.q_from.empty():
+                # print("GV queue is empty, sleeping...")
                 time.sleep(0.001)
             else:
                 while not self.q_from.empty():

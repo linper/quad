@@ -1,21 +1,24 @@
 import matplotlib.pyplot as plt
 from interp import *
+import pybullet as p
 
 
 class DestPoint:
-    def __init__(self, x, y, t, dx=None, dy=None):
+    def __init__(self, pos, t, dx=None, dy=None, dz=None):
         self.t = t
-        self.x = x
-        self.y = y
+        self.x = pos[0]
+        self.y = pos[1]
+        self.z = pos[2]
         self.dx = dx
         self.dy = dy
+        self.dz = dz
 
     @classmethod
     def default(cls):
-        return cls(0, 0, 0)
+        return cls([0.0, 0.0, 0.0], 0.0)
 
     def clone(self):
-        return DestPoint(self.x, self.y, self.t, self.dx, self.dy)
+        return DestPoint([self.x, self.y, self.z], self.t, self.dx, self.dy, self.dz)
 
 
 class Logger:
@@ -27,10 +30,11 @@ class Logger:
 
 class Plan:
     def __init__(self, leg, start: DestPoint = None):
-        if not start:
-            start_ = DestPoint(0, 0, 0)
-        else:
-            start_ = start
+        # if not start:
+        #     start_ = DestPoint.default()
+        # else:
+        #     start_ = start
+        start_ = DestPoint(leg.position, 0.0)
 
         self.leg = leg
         self.need_plan: bool = True
@@ -50,55 +54,66 @@ class Plan:
         self.steps.clear()
         self.need_plan = True
 
-    def adjust(self, x, y):
+    def adjust(self, x, y, z):
         for s in self.steps:
             s.x += x
             s.y += y
+            s.z += z
 
         self.target.x += x
         self.target.y += y
+        self.target.z += z
 
     def plan_steps(self):
         time = np.array([i.t for i in self.points])
         data_x = np.array([i.x for i in self.points])
         data_y = np.array([i.y for i in self.points])
+        data_z = np.array([i.z for i in self.points])
         data_dx = np.array([i.dx for i in self.points])
         data_dy = np.array([i.dy for i in self.points])
+        data_dz = np.array([i.dz for i in self.points])
 
         self.log.points.extend(self.points)
 
         spline_x = connect_splines2(time, data_x, data_dx, time)
         spline_y = connect_splines2(time, data_y, data_dy, time)
+        spline_z = connect_splines2(time, data_z, data_dz, time)
         time_steps = connect_times(time)
         dx = akima(np.array(time_steps), np.array(spline_x))
         dy = akima(np.array(time_steps), np.array(spline_y))
+        dz = akima(np.array(time_steps), np.array(spline_z))
 
-        steps = [DestPoint(x, y, t, dx_, dy_) for x, y, t, dx_, dy_ in zip(spline_x, spline_y, time_steps, dx, dy)]
+        steps = [DestPoint([x, y, z], t, dx_, dy_, dz_) for x, y, z, t, dx_, dy_, dz_ in zip(spline_x, spline_y, spline_z, time_steps, dx, dy, dz)]
         self.steps = steps
 
     def step(self):
         self.last = self.cur
         s = self.steps[0]
         self.cur = s
+        self.leg.position = np.array([s.x, s.y, s.z])
         # do something
 
         self.log.steps.append(s)
         self.steps.pop(0)
 
     def check2(self):
-        hits = False
-        dst = float("-inf")
-        for o in self.obstacles:
-            if o.perp:
-                continue
+        l_idx = self.leg.idx
+        l_tf = self.leg.body.sens_info.touch_force[l_idx]
+        # hits = False
+        # dst = 0.0
+        damp_val = p.getJointState(self.leg.body.model, self.leg.dampener)[0]
+        dst = T_RAD - damp_val
+        # for o in self.obstacles:
+        #     if o.perp:
+        #         continue
+        #
+        #     d = o.hits(self.cur) - self.cur.y
+        #
+        #     if o.x1 <= self.cur.x <= o.x2 and 0 <= abs(d) <= T_RAD and d > dst:
+        #         dst = d
+        #         hits = True
 
-            d = o.hits(self.cur) - self.cur.y
-
-            if o.x1 <= self.cur.x <= o.x2 and 0 <= abs(d) <= T_RAD and d > dst:
-                dst = d
-                hits = True
-
-        return hits, dst if hits else 0
+        return bool(l_tf), dst
 
     def plot(self):
         plt.figure()
