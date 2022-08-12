@@ -10,6 +10,7 @@ from enum import IntEnum
 import pybullet as p
 import multiprocessing as mp
 import time
+from misc import ActCmd
 
 
 class SPoint:
@@ -20,9 +21,10 @@ class SPoint:
 
 
 class GrView:
-    def __init__(self, q_from: mp.Queue, q_to: mp.Queue):
+    def __init__(self, q_from: mp.Queue, q_to: mp.Queue, q_cmd: mp.Queue):
         self.q_from: mp.Queue = q_from
         self.q_to: mp.Queue = q_to
+        self.q_cmd: mp.Queue = q_cmd
         self.root = Tk()
         self.mul = 800
         self.height = 800
@@ -34,8 +36,13 @@ class GrView:
         self.space.bind("<Double-Button-1>", self.btn_dbl_clk)
         self.space.grid(row=0, column=0)
         self.saved: list = []
+
         b = Button(self.root, text="Go", command=self.send_go_cmd)
         b.place(x=0, y=self.height - 20)
+        b = Button(self.root, text="Clear", command=self.send_clear_cmd)
+        b.place(x=0, y=self.height - 50)
+        b = Button(self.root, text="Plot", command=self.send_plot_cmd)
+        b.place(x=0, y=self.height - 80)
 
     def draw_leg_circle(self, leg, q: Quad):
         force = q.sens_info.touch_force[leg.idx]
@@ -48,6 +55,7 @@ class GrView:
         r = 6
         pt = self.mul * leg.position * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
         self.space.create_oval(pt[1] - r, pt[0] - r, pt[1] + r, pt[0] + r, fill=color)
+        self.space.create_text(pt[1] - r - 40, pt[0] - r - 10, anchor=W, text=f"{leg.name}:{leg.fsm.state_str()}")
 
     def draw_circle(self, pos, color):
         r = 6
@@ -101,12 +109,26 @@ class GrView:
             time.sleep(0.05)
 
         print("Go")
-        saved_adj = [(np.array([s.y, s.x, -0.2 * self.mul]) - np.array([self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
+        saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array([self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
         self.q_to.put(saved_adj)
         self.path_sent = True
-        # s = SPoint(ev.x, ev.y, new_path_col)
-        # self.saved.append(s)
-        # self.draw_circle2(s)
+
+    def send_clear_cmd(self):
+        while self.q_cmd.full():
+            print("GV cmd queue is full, sleeping...")
+            time.sleep(0.05)
+
+        print("clear")
+        self.saved.clear()
+        self.q_cmd.put(ActCmd.CLEAR)
+
+    def send_plot_cmd(self):
+        while self.q_cmd.full():
+            print("GV cmd queue is full, sleeping...")
+            time.sleep(0.05)
+
+        print("plot")
+        self.q_cmd.put(ActCmd.PLOT)
 
     def btn_clk(self, ev):
         new_path_col = "blue"
@@ -152,9 +174,12 @@ class GrView:
                 while not self.q_from.empty():
                     q = self.q_from.get()
                 self.update(q)
+                #     q = self.q_from.get()
+                # self.update(self.q_from.get())
+                # self.q_from.get()
 
 
-def tk_start(q_from, q_to):
-    gv = GrView(q_from, q_to)
+def tk_start(q_from, q_to, q_cmd):
+    gv = GrView(q_from, q_to, q_cmd)
     gv.root.after(200, gv.start)
     gv.root.mainloop()

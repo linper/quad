@@ -4,13 +4,15 @@ from enum import Enum
 
 
 MAX_HEIGHT = 1.0
-MAX_DIP = -0.2
+MAX_DIP = -0.32
 MAX_FREQ = 50
 MIN_PERIOD = 0.02
 MAX_DROP_SPEED = -0.2
 T_RAD = 0.012
+T_EQL = 0.25
 ADJUST_SENS = abs(T_RAD) * 0.05
-
+STEP = 0.01
+LEG_TAR_H = -0.26
 
 
 # some aggregations

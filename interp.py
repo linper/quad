@@ -1,20 +1,21 @@
 import numpy as np
 import math
-from common import *
 from consts import *
 
 
 def drop_time(h):
-    return (h - MAX_DIP) / ((0.25 * T_RAD) / MIN_PERIOD)
+    return abs(h - MAX_DIP) / ((0.25 * T_RAD) / MIN_PERIOD) + MIN_PERIOD
 
 
 def fill_diffs(lst):
     time = np.array([float(i.t) for i in lst])
     data_x = np.array([float(i.x) for i in lst])
     data_y = np.array([float(i.y) for i in lst])
+    data_z = np.array([float(i.z) for i in lst])
 
     dx = akima(time, data_x)
     dy = akima(time, data_y)
+    dz = akima(time, data_z)
 
     for i in range(len(lst)):
         if lst[i].dx is None:
@@ -22,6 +23,9 @@ def fill_diffs(lst):
 
         if lst[i].dy is None:
             lst[i].dy = dy[i]
+
+        if lst[i].dz is None:
+            lst[i].dz = dz[i]
 
 
 def line_cof(x1, y1, x2, y2):
@@ -99,6 +103,8 @@ def lagrange_single(X, index, visible_x):
     L = np.ones(shape=visible_x.shape, dtype=np.float32)
     for j in range(len(X)):
         if j != index:
+            if X[index] - X[j] == 0:
+                a = 0
             L = L * ((visible_x - X[j]) / (X[index] - X[j]))
     return L
 

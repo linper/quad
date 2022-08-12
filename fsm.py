@@ -58,8 +58,21 @@ class FSM:
 
         self.map[FSMAction.NO_ACT][FSMState.DROPPING] = FSMState.DROPPING
         self.map[FSMAction.HIT][FSMState.DROPPING] = FSMState.TRAVERSING
+        self.map[FSMAction.END][FSMState.DROPPING] = FSMState.PENDING
 
         self.map[FSMAction.NO_ACT][FSMState.PENDING] = FSMState.PENDING
+        self.map[FSMAction.DROP][FSMState.PENDING] = FSMState.DROPPING
+
+    def state_str(self):
+        str_dict = {
+            FSMState.STOPPED: "STP",
+            FSMState.ASCENDING: "ASC",
+            FSMState.DESCENDING: "DES",
+            FSMState.LANDING: "LND",
+            FSMState.TRAVERSING: "TRV",
+            FSMState.DROPPING: "DRP",
+            FSMState.PENDING: "PND"}
+        return str_dict[self.cur]
 
     def next(self, act: FSMAction):
         st = self.map[act][self.cur]
@@ -72,15 +85,9 @@ class FSM:
         self.cur = FSMState.STOPPED
 
     def execute(self):
-        self.leg.plan.log.targets.append(self.leg.plan.target)
-        if self.cur != FSMState.PENDING:
-            self.func[self.cur]()
-            if self.cur == FSMState.PENDING:
-                print("Pending")
+        # self.leg.plan.log.targets.append(self.leg.plan.target)
+        self.func[self.cur]()
 
-
-    def act_stopped(self):
-        pass
 
     def act_ascending(self):
         TOP_TM_C = 0.4
@@ -101,7 +108,7 @@ class FSM:
                 MAX_HEIGHT],
                 end_time, None, None, 0.0)
 
-            self.leg.plan.log.points.append(end)
+            # self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(DestPoint(
@@ -134,7 +141,7 @@ class FSM:
             start = p.cur.clone()
             end = DestPoint([p.target.x, p.target.y, p.target.z], p.target.t, 0)
 
-            self.leg.plan.log.points.append(end)
+            # self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(DestPoint(
@@ -150,7 +157,7 @@ class FSM:
 
             p.need_plan = False
 
-        hits, _ = p.check2()
+        hits, _ = p.check_damp()
 
         if hits:
             p.reset()
@@ -172,7 +179,7 @@ class FSM:
             dt = abs(p.last.t - p.cur.t)
             end = DestPoint([p.target.x, p.target.y, MAX_DIP], abs(start.z - MAX_DIP) * dz / dt)
 
-            self.leg.plan.log.points.append(end)
+            # self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(end)
@@ -183,7 +190,7 @@ class FSM:
 
             p.need_plan = False
 
-        hits, _ = p.check2()
+        hits, _ = p.check_damp()
 
         if hits or len(p.steps) == 0:
             p.reset()
@@ -193,9 +200,10 @@ class FSM:
 
     def act_traversing(self):
         p = self.leg.plan
+        p.adjust(0, 0, 0.05 * (LEG_TAR_H - self.leg.position[2]))
 
         if p.need_plan:
-            print("Traversing")
+            print(f"{p.leg.name}:Traversing")
             start = p.cur.clone()
             start.t = 0.0
             start.dx = 0.0
@@ -203,7 +211,7 @@ class FSM:
             start.dz = 0.0
             end = DestPoint([p.target.x, p.target.y, p.target.z], p.target.t, 0.0, 0.0, 0.0)
 
-            self.leg.plan.log.points.append(end)
+            # self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(end)
@@ -214,7 +222,7 @@ class FSM:
 
             p.need_plan = False
 
-        hits, adj = p.check2()
+        hits, adj = p.check_damp()
 
         if len(p.steps) == 0:
             p.reset()
@@ -224,20 +232,23 @@ class FSM:
             self.next(FSMAction.DROP)
         elif ADJUST_SENS < abs(adj):
             p.adjust(0, 0, adj)
+            print(f"adjusted by {[0, 0, adj]}")
             p.step()
         else:
             p.step()
 
     def act_dropping(self):
         p = self.leg.plan
+        p.adjust(0, 0, 0.05 * (LEG_TAR_H - self.leg.position[2]))
 
         if p.need_plan:
-            print("Dropping")
+            print(f"{p.leg.name}:Dropping")
             start = p.cur.clone()
             start.t = 0.0
+            print(f"led:{p.leg.name} h:{start.z} drop time:{drop_time(start.z)}")
             end = DestPoint([p.cur.x, p.cur.y, MAX_DIP], drop_time(start.z))
 
-            self.leg.plan.log.points.append(end)
+            # self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(end)
@@ -248,17 +259,34 @@ class FSM:
 
             p.need_plan = False
 
-        hits, _ = p.check2()
+        hits, _ = p.check_damp()
 
-        if hits or len(p.steps) == 0:
+        if hits:
             p.reset()
             self.next(FSMAction.HIT)
+        elif len(p.steps) == 0:
+            p.reset()
+            self.next(FSMAction.END)
         else:
             p.step()
 
-    def act_staying(self):
+    def act_stopped(self):
         pass
 
     def act_pending(self):
-        print("Pending")
+        p = self.leg.plan
+        hits, adj = p.check_damp()
+
+        p.adjust(0, 0, 0.05 * (LEG_TAR_H - self.leg.position[2]))
+        print(f"adjusted by {[0, 0, 0.05 * (LEG_TAR_H - self.leg.position[2])]} avg")
+        if hits and ADJUST_SENS < abs(adj):
+            p.adjust(0, 0, adj)
+            print(f"adjusted by {[0, 0, adj]}")
+            p.step_zero()
+        elif not hits:
+            p.adjust(0, 0, -0.01 * T_RAD)
+            print(f"adjusted by {[0, 0, -0.01 * T_RAD]} drop")
+            p.step_zero()
+            # self.next(FSMAction.DROP)
+        # print("Pending")
 

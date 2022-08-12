@@ -1,5 +1,11 @@
 from interp import line_cof, sect_intersect, dist
 from plan import DestPoint
+from enum import IntEnum
+
+
+class ActCmd(IntEnum):
+    CLEAR = 0
+    PLOT = 1
 
 
 class Obstacle:

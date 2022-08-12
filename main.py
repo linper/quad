@@ -3,15 +3,31 @@ import time
 import numpy as np
 import math
 from ground_view import tk_start, SPoint
-import threading
+import matplotlib.pyplot as plt
 
 from consts import *
+from misc import ActCmd
 from leg import Leg
 from quad import Quad
 import multiprocessing as mp
 
+log_dt_len = 3000
+log_dt_idx = 0
+log_data: np.ndarray = np.zeros((5, log_dt_len), dtype=np.float)
+
+def plot_heigths():
+    plt.figure()
+    time_data = list(range(log_dt_len))
+    for i, l in enumerate(q.legs):
+        plt.plot(time_data, log_data[i, :])
+
+    plt.plot(time_data, log_data[4, :], color="black")
+    plt.grid("both")
+    plt.show()
+
 def get_commands():
     global gv
+    global log_dt_idx
 
     arr: list
     got_target = False
@@ -20,7 +36,28 @@ def get_commands():
         arr = q_from_gv.get()
         got_target = True
 
+    while not q_cmd.empty():
+        cmd = q_cmd.get()
+        if cmd == ActCmd.CLEAR:
+            # for l in q.legs:
+            #     l.position = l.def_pos
+            arr = [np.array([0.0, 0.0, 0.0])]
+            got_target = True
+        elif cmd == ActCmd.PLOT:
+            plot_heigths()
+            # log_data.clear()
+
+
     q.update_sensor_info()
+
+    q.avg_leg_h = np.average(np.array([l.position[2] + l.plan.adj[2] for l in q.legs]))
+    print(f"leg avg. h:{q.avg_leg_h}:{[l.position[2] + l.plan.adj[2] for l in q.legs]}")
+
+    log_entry = [l.position[2] + l.plan.adj[2] for l in q.legs]
+    log_entry.append(q.avg_leg_h)
+    log_data[:, log_dt_idx] = np.array(log_entry)
+    log_dt_idx = (log_dt_idx + 1) % log_dt_len
+
     if got_target:
         q.set_target(arr)
 
@@ -30,13 +67,14 @@ def get_commands():
         l.fsm.execute()
         l.update(q)
 
-    while q_to_gv.full():
-        print("queue to GV is full")
-        time.sleep(0.001)
+    # while q_to_gv.full():
+    #     print("queue to GV is full")
+    #     time.sleep(0.001)
 
-    q_to_gv.put(q)
+    if q_to_gv.empty():
+        q_to_gv.put(q)
 
-
+    # q_to_gv.put(q)
 
 # start point
 
@@ -49,10 +87,6 @@ useMaximalCoordinates = False
 
 # model = p.loadURDF("quad3.xacro", [0.0, 0.0, 0.5], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
 model = p.loadURDF("quad3.xacro", [0.0, 0.0, 0.5], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
-# model = p.loadURDF("quad2.xacro", [0.0, 0.0, 0.2], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
-# model = p.loadURDF("quad2.xacro", [0.0, 0.0, 0.2], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
-# model = p.loadURDF("quad.xacro", [0.0, 0.0, 0.2], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
-# model = p.loadURDF("quad.xacro", [0.0, 0.0, 0.2], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
 
 # Getting joints indices
 nJoints = p.getNumJoints(model)
@@ -119,10 +153,11 @@ for s in q.sensors:
     print(p.getDynamicsInfo(q.model, s))
     print(p.getJointInfo(q.model, s)[1])
 
-q_to_gv = mp.Queue()
-q_from_gv = mp.Queue()
+q_to_gv = mp.Queue(1)
+q_from_gv = mp.Queue(10)
+q_cmd = mp.Queue(10)
 
-gv = mp.Process(target=tk_start, args=(q_to_gv, q_from_gv))
+gv = mp.Process(target=tk_start, args=(q_to_gv, q_from_gv, q_cmd))
 gv.start()
 # q.to_starting_position()  # sets robot to starting position
 counter = 0
@@ -139,18 +174,4 @@ while 1:
         p.stepSimulation()
     else:
         time.sleep(0.001)
-
-# to_starting_position()  # sets robot to starting position
-# counter = 0
-
-
-# while 1:
-#     p.stepSimulation()
-#     # high_freq()  # measuring pressure sensors more often
-#     if counter % 5 == 0:
-#         t = threading.Thread(target=get_commands)  # base frequency is 50 Hz
-#         t.start()
-#     counter += 1
-#
-#     time.sleep(1 / 250)
 

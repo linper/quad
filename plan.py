@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import numpy as np
+
 from interp import *
 import pybullet as p
 
@@ -30,10 +32,6 @@ class Logger:
 
 class Plan:
     def __init__(self, leg, start: DestPoint = None):
-        # if not start:
-        #     start_ = DestPoint.default()
-        # else:
-        #     start_ = start
         start_ = DestPoint(leg.position, 0.0)
 
         self.leg = leg
@@ -42,10 +40,10 @@ class Plan:
         self.last: DestPoint = start_
         self.points: list = []
         self.steps: list = []
-        # self.steps = [start_]
         self.target: DestPoint = DestPoint.default()
         self.log: Logger = Logger()
         self.obstacles: list = []
+        self.adj: np.ndarray = np.zeros(3, np.float)
 
         self.log.targets.append(start_)
 
@@ -54,15 +52,10 @@ class Plan:
         self.steps.clear()
         self.need_plan = True
 
-    def adjust(self, x, y, z):
-        for s in self.steps:
-            s.x += x
-            s.y += y
-            s.z += z
+    def adjust(self, x=0.0, y=0.0, z=0.0):
+        self.adj = self.adj + np.array([x, y, z])
+        # print(f"pos:{self.leg.position[2]} adjust:{z} total:{self.adj[2]}")
 
-        self.target.x += x
-        self.target.y += y
-        self.target.z += z
 
     def plan_steps(self):
         time = np.array([i.t for i in self.points])
@@ -73,7 +66,7 @@ class Plan:
         data_dy = np.array([i.dy for i in self.points])
         data_dz = np.array([i.dz for i in self.points])
 
-        self.log.points.extend(self.points)
+        # self.log.points.extend(self.points)
 
         spline_x = connect_splines2(time, data_x, data_dx, time)
         spline_y = connect_splines2(time, data_y, data_dy, time)
@@ -90,28 +83,28 @@ class Plan:
         self.last = self.cur
         s = self.steps[0]
         self.cur = s
-        self.leg.position = np.array([s.x, s.y, s.z])
+        self.leg.position = np.array([s.x, s.y, s.z]) + self.adj
         # do something
 
-        self.log.steps.append(s)
+        # self.log.steps.append(s)
         self.steps.pop(0)
 
-    def check2(self):
+    def step_zero(self):
+        self.leg.position = np.array([self.cur.x, self.cur.y, self.cur.z]) + self.adj
+
+    def check_damp(self):
         l_idx = self.leg.idx
         l_tf = self.leg.body.sens_info.touch_force[l_idx]
-        # hits = False
-        # dst = 0.0
+
         damp_val = p.getJointState(self.leg.body.model, self.leg.dampener)[0]
-        dst = T_RAD - damp_val
-        # for o in self.obstacles:
-        #     if o.perp:
-        #         continue
-        #
-        #     d = o.hits(self.cur) - self.cur.y
-        #
-        #     if o.x1 <= self.cur.x <= o.x2 and 0 <= abs(d) <= T_RAD and d > dst:
-        #         dst = d
-        #         hits = True
+
+        damp_val_n = damp_val / T_RAD
+        # u_thr = 0.7 * T_RAD
+        # l_thr = 0.3 * T_RAD
+
+        dst = 0.0
+        if damp_val_n < 0.85:
+            dst = 0.5 * (damp_val - T_RAD)
 
         return bool(l_tf), dst
 
