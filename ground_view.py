@@ -31,7 +31,8 @@ class GrView:
         self.width = 600
         self.path_sent = False
         self.root.title = "ground view"
-        self.space = Canvas(self.root, background="white", height=self.height, width=self.width)
+        self.space = Canvas(self.root, background="white",
+                            height=self.height, width=self.width)
         self.space.bind("<Button-1>", self.btn_clk)
         self.space.bind("<Double-Button-1>", self.btn_dbl_clk)
         self.space.grid(row=0, column=0)
@@ -53,49 +54,107 @@ class GrView:
             color = "red"
 
         r = 6
-        pt = self.mul * leg.position * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
-        self.space.create_oval(pt[1] - r, pt[0] - r, pt[1] + r, pt[0] + r, fill=color)
-        self.space.create_text(pt[1] - r - 40, pt[0] - r - 10, anchor=W, text=f"{leg.name}:{leg.fsm.state_str()}")
+        pt = self.mul * leg.position * \
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
+        self.space.create_oval(pt[1] - r, pt[0] - r,
+                               pt[1] + r, pt[0] + r, fill=color)
+        self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
+                               anchor=W, text=f"{leg.name}:{leg.fsm.state_str()}")
 
     def draw_circle(self, pos, color):
         r = 6
-        self.space.create_oval(pos[1] - r, pos[0] - r, pos[1] + r, pos[0] + r, fill=color)
+        self.space.create_oval(
+            pos[1] - r, pos[0] - r, pos[1] + r, pos[0] + r, fill=color)
 
     def draw_circle2(self, sp: SPoint):
         r = 6
-        self.space.create_oval(sp.x - r, sp.y - r, sp.x + r, sp.y + r, fill=sp.color)
+        self.space.create_oval(sp.x - r, sp.y - r, sp.x +
+                               r, sp.y + r, fill=sp.color)
 
     def draw_force(self, q: Quad):
-        reduced = self.mul * q.sens_info.t_force_info.pos * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+        reduced = self.mul * q.sens_info.t_force_info.pos * \
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
         lpt = np.array([self.height / 2, self.width / 2, 0])
-        self.space.create_line(lpt[1], lpt[0], reduced[1], reduced[0], width=4, fill="black")
+        self.space.create_line(
+            lpt[1], lpt[0], reduced[1], reduced[0], width=4, fill="black")
         self.space.pack()
         self.draw_circle(reduced, q.sens_info.t_force_info.color)
 
+    def draw_leg_adjust(self, leg, q: Quad):
+        cpt = np.array([self.height / 2, self.width / 2, 0])
+        lpt = self.mul * leg.position * \
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
+        reduced = self.mul * q.sens_info.t_force_info.pos * \
+        np.array([1, 1, 1]) + \
+        np.array([self.height / 2, self.width / 2, 0])
+        # reduced = self.mul * q.sens_info.base_force_vector * \
+            # np.array([1, 1, 1]) + \
+            # np.array([self.height / 2, self.width / 2, 0])
+
+        lk, lb = line_cof(cpt[1], cpt[0], lpt[1], lpt[0])
+        rk = -1 / lk
+        rb = reduced[0] - (reduced[1] * rk)
+
+        _, ix, iy = intersect(lk, lb, rk, rb)
+
+        if (cpt[0] < lpt[0] and cpt[0] < iy) or (cpt[0] > lpt[0] and cpt[0] > iy):
+            color = "green"
+        else:
+            color = "red"
+
+        self.space.create_line(
+            ix, iy, reduced[1], reduced[0], width=4, fill="red")
+        self.space.create_line(
+            lpt[1], lpt[0], cpt[1], cpt[0], width=4, fill="black")
+        self.space.create_line(0, rb, self.width, rk *
+                               self.width+rb, width=4, fill="orange")
+        self.space.create_line(
+            ix, iy, cpt[1], cpt[0], width=4, fill=color)
+        self.space.pack()
+
     def draw_perimeter(self, q: Quad):
-        t_legs = [l for i, l in enumerate(q.legs_cw) if q.sens_info.touch_force[l.idx] > 0]
+        t_legs = [l for i, l in enumerate(
+            q.legs_cw) if q.sens_info.touch_force[l.idx] > 0]
 
         for i in range(len(t_legs)):
-            lpt = self.mul * t_legs[i - 1].position * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
-            cpt = self.mul * t_legs[i].position * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+            lpt = self.mul * t_legs[i - 1].position * np.array(
+                [1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+            cpt = self.mul * \
+                t_legs[i].position * np.array([1, 1, 1]) + \
+                np.array([self.height / 2, self.width / 2, 0])
 
-            self.space.create_line(lpt[1], lpt[0], cpt[1], cpt[0], width=4, fill="green")
+            self.space.create_line(
+                lpt[1], lpt[0], cpt[1], cpt[0], width=4, fill="green")
             self.space.pack()
 
         g_legs = [l for i, l in enumerate(q.legs_cw) if l.grounded]
 
         for i in range(len(g_legs)):
-            lpt = self.mul * g_legs[i - 1].position * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
-            cpt = self.mul * g_legs[i].position * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+            lpt = self.mul * g_legs[i - 1].position * np.array(
+                [1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
+            cpt = self.mul * \
+                g_legs[i].position * np.array([1, 1, 1]) + \
+                np.array([self.height / 2, self.width / 2, 0])
 
-            self.space.create_line(lpt[1], lpt[0], cpt[1], cpt[0], width=1, fill="green")
+            self.space.create_line(
+                lpt[1], lpt[0], cpt[1], cpt[0], width=1, fill="green")
             self.space.pack()
 
     def draw_s_sines(self, q: Quad):
-        sc = self.mul * q.sens_info.s_center * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
-        scl = self.mul * q.sens_info.to_s_closest * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
-        f = self.mul * q.sens_info.t_force_info.pos * np.array([1, 1, 1]) + np.array([self.height / 2, self.width / 2, 0])
-        self.space.create_line(f[1], f[0], scl[1], scl[0], width=4, fill="blue")
+        sc = self.mul * q.sens_info.s_center * \
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
+        scl = self.mul * q.sens_info.to_s_closest * \
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
+        f = self.mul * q.sens_info.t_force_info.pos * \
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
+        self.space.create_line(
+            f[1], f[0], scl[1], scl[0], width=4, fill="blue")
         self.space.create_line(f[1], f[0], sc[1], sc[0], width=4, fill="blue")
         self.space.pack()
 
@@ -109,7 +168,8 @@ class GrView:
             time.sleep(0.05)
 
         print("Go")
-        saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array([self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
+        saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
+            [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
         self.q_to.put(saved_adj)
         self.path_sent = True
 
@@ -148,7 +208,6 @@ class GrView:
             if abs(s.x - ev.x) <= err and abs(s.y - ev.y) <= err:
                 self.saved.pop(i)
 
-
     def update(self, q: Quad):
         self.root.update()
 
@@ -159,6 +218,7 @@ class GrView:
 
         for l in q.legs:
             self.draw_leg_circle(l, q)
+            self.draw_leg_adjust(l, q)
 
         self.draw_s_sines(q)
         self.draw_force(q)

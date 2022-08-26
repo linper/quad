@@ -55,9 +55,9 @@ def sect_intersect(x11, y11, x12, y12, x21, y21, x22, y22):
         return incl, x, y
 
     incl = min(x11, x12) < x < max(x11, x12) and \
-           min(x21, x22) < x < max(x21, x22) and \
-           min(y11, y12) < y < max(y11, y12) and \
-           min(y21, y22) < y < max(y21, y22)
+        min(x21, x22) < x < max(x21, x22) and \
+        min(y11, y12) < y < max(y11, y12) and \
+        min(y21, y22) < y < max(y21, y22)
     return incl, x, y
 
 
@@ -216,15 +216,21 @@ def connect_times(t):
 
 
 def get_vectors_cosine(a, b):
-    if np.linalg.norm(a) * np.linalg.norm(b) == 0:
+    la = np.linalg.norm(a)
+    lb = np.linalg.norm(b)
+    if la == 0 or lb == 0:
         return 0
     else:
-        return (np.dot(a, b)) / (np.linalg.norm(a) * np.linalg.norm(b))
+        return np.dot(a, b) / (la * lb)
+
+
+def get_vectors_angle(a, b):
+    return math.acos(get_vectors_cosine(a, b))
 
 
 def get_cross_product(a, b):
-    return np.cross(np.array(a), np.array(b))
-    # return np.array([a[1] * b[2] - a[2] * b[1],  a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
+    # return np.cross(a, b)
+    return np.array([a[1] * b[2] - a[2] * b[1],  a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
 
 
 def get_rotation_matrix_from_two_vectors(a, b):
@@ -244,12 +250,14 @@ def get_rotation_matrix_from_two_vectors(a, b):
     matrix[0][2] = axis[1] * rsin + axis[0] * axis[2] * (1 - rcos)
     matrix[1][2] = -axis[0] * rsin + axis[1] * axis[2] * (1 - rcos)
     matrix[2][2] = rcos + axis[2] * axis[2] * (1 - rcos)
+
     return matrix
 
 
 def strech_vector_to(v, lenght):
-    if np.linalg.norm(v) != 0:
-        return v * (lenght / np.linalg.norm(v))
+    lv = np.linalg.norm(v)
+    if lv != 0:
+        return v * (lenght / lv)
     else:
         return np.array([0, 0, 0])
 

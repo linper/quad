@@ -44,7 +44,8 @@ class SensInfo:
         self.base_orientation = [np.zeros(4, dtype=float)]
         self.base_position = [np.zeros(3, dtype=float)]
         self.horizontal_turn_matrix = None
-        self.t_force_info: TForceInfo = TForceInfo(np.zeros(3, dtype=float), TouchState.PT0)
+        self.t_force_info: TForceInfo = TForceInfo(
+            np.zeros(3, dtype=float), TouchState.PT0)
         self.s_center = np.zeros(3, dtype=float)
         self.to_s_closest = np.zeros(3, dtype=float)
 
@@ -58,12 +59,14 @@ class SensInfo:
                     temp = math.atan(X[1] / X[0])
                 else:
                     temp = math.atan(X[1] / X[0]) - math.pi
-                h = p.getMatrixFromQuaternion(p.getQuaternionFromEuler([0, 0, -temp]))
+                h = p.getMatrixFromQuaternion(
+                    p.getQuaternionFromEuler([0, 0, -temp]))
                 horizontal_turn_m = np.zeros((3, 3))
                 for j in range(9):
                     horizontal_turn_m[j // 3][j % 3] = h[j]
                 self.horizontal_turn_matrix = horizontal_turn_m.copy()
-                new_matrix = np.matmul(horizontal_turn_m, base_orientation_matrix)
+                new_matrix = np.matmul(
+                    horizontal_turn_m, base_orientation_matrix)
                 return new_matrix
         return np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
@@ -80,32 +83,6 @@ class SensInfo:
 
         center = functools.reduce(lambda a, b: a + b, t_pos) / len(t_pos)
         self.s_center = center
-        # l1: Leg = self.host.legs[0]
-        # l2: Leg = self.host.legs[1]
-        # found = False
-        #
-        # for i in range(-2, len(self.host.legs) - 2):
-        #     l1 = self.host.legs[i]
-        #     l2 = self.host.legs[i + 1]
-        #     itc, _, _ = sect_intersect(l1.position[0], l1.position[1], l2.position[0], l2.position[1], center[0], center[1], self.t_force_info.pos[0], self.t_force_info.pos[1])
-        #     if itc:
-        #         found = True
-        #         break
-        #
-        # if not found:
-        #     return
-        #
-        # len_to_c = np.linalg.norm(self.t_force_info.pos - center)
-        # k, b = line_cof(l1.position[0], l1.position[1], l2.position[0], l2.position[1])
-        # k_tr = -1 / k
-        # perp_vect = np.array([1.0, k_tr + b, 0.0])  # kx + b when x is 1
-        # perp_vect = strech_vector_to(perp_vect, len_to_c)
-        # perp_mod = self.t_force_info.pos + perp_vect
-        # itc, x, y = sect_intersect(l1.position[0], l1.position[1], l2.position[0], l2.position[1], center[0], center[1], perp_mod[0], perp_mod[1])
-        # if itc:
-        #     self.to_s_closest = np.array([x, y, self.t_force_info.pos[2]]) - self.t_force_info.pos
-        # else:
-        #     self.to_s_closest = np.zeros(3, dtype=float)
 
     def update_t_force(self):
         force = np.copy(self.host.sens_info.base_force_vector)
@@ -144,19 +121,23 @@ class SensInfo:
                 state_arr.append(TouchState.PT0)
 
         if TouchState.PT3 in state_arr:
-            reduced_arr = [j for i, j in zip(state_arr, res_arr) if i == TouchState.PT3]
+            reduced_arr = [j for i, j in zip(
+                state_arr, res_arr) if i == TouchState.PT3]
             state = TouchState.PT3
         elif TouchState.PT2 in state_arr:
-            reduced_arr = [j for i, j in zip(state_arr, res_arr) if i == TouchState.PT2]
+            reduced_arr = [j for i, j in zip(
+                state_arr, res_arr) if i == TouchState.PT2]
             state = TouchState.PT2
         elif TouchState.PT1 in state_arr:
-            reduced_arr = [j for i, j in zip(state_arr, res_arr) if i == TouchState.PT1]
+            reduced_arr = [j for i, j in zip(
+                state_arr, res_arr) if i == TouchState.PT1]
             state = TouchState.PT1
         else:
             reduced_arr = res_arr
 
         if len(res_arr) > 0:
-            reduced = functools.reduce(lambda a, b: a + b, reduced_arr) / len(reduced_arr)
+            reduced = functools.reduce(
+                lambda a, b: a + b, reduced_arr) / len(reduced_arr)
             self.t_force_info = TForceInfo(reduced, state)
 
 
@@ -183,13 +164,15 @@ class Quad:
             self.legs_cw[i].prev = self.legs_cw[i-1]
             self.legs_cw[i].next = self.legs_cw[i+1]
 
-
     # gets info from sensors
+
     def update_sensor_info(self):
-        self.sens_info.base_position = np.array(p.getBasePositionAndOrientation(self.model)[0])
+        self.sens_info.base_position = np.array(
+            p.getBasePositionAndOrientation(self.model)[0])
         self.sens_info.base_orientation = np.array(
             p.getEulerFromQuaternion(p.getBasePositionAndOrientation(self.model)[1]))
-        base_orientation_1d = np.array(p.getMatrixFromQuaternion(p.getBasePositionAndOrientation(self.model)[1]))
+        base_orientation_1d = np.array(p.getMatrixFromQuaternion(
+            p.getBasePositionAndOrientation(self.model)[1]))
         for i in range(9):
             base_orientation_matrix[i // 3][i % 3] = base_orientation_1d[i]
         self.sens_info.base_frame_orientation_matrix = self.sens_info.get_base_frame_orientation_matrix()
@@ -201,22 +184,24 @@ class Quad:
             self.sens_info.touch_force[l.idx] = -f
             # self.sens_info.touch_force[l.idx] = -p.getJointState(self.model, l.sensor)[2][2]
 
-        b_force = -np.array(p.getJointState(self.model, self.sensor)[2][slice(3)])
+        b_force = -np.array(p.getJointState(self.model,
+                            self.sensor)[2][slice(3)])
         if len(self.sens_info.bf_hist) >= self.sens_info.bf_max:
             self.sens_info.bf_hist.pop(0)
 
         self.sens_info.bf_hist.append(b_force)
+        # 'base_force_vector' is running average of last 'bf_max' b_force' values
         self.sens_info.base_force_vector = functools.reduce(lambda a, b: a + b, self.sens_info.bf_hist) / len(
             self.sens_info.bf_hist)
         self.sens_info.update_t_force()
         self.sens_info.update_s()
 
-
     def set_target(self, lst):
         if len(lst) == 0:
-            return
+            target = np.zeros(3, dtype=float)
+        else:
+            target = lst[0]  # for now
 
-        target = lst[0]  # for now
         for l in self.legs:
             l_target = l.def_pos + target
             l.make_plan(DestPoint(l_target, 1.0), FSMState.TRAVERSING)

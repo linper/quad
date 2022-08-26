@@ -5,6 +5,7 @@ from enum import Enum
 
 MAX_HEIGHT = 1.0
 MAX_DIP = -0.32
+MIN_DIP = -0.1
 MAX_FREQ = 50
 MIN_PERIOD = 0.02
 MAX_DROP_SPEED = -0.2
@@ -24,7 +25,8 @@ DIRECTIONS = [FRONT_DIR_LEFT, FRONT_DIR_RIGHT, BACK_DIR_LEFT, BACK_DIR_RIGHT]
 
 # registering maximum angles for joints
 restrictions = np.array([
-    [-0.1, -0.1, -0.04, -0.15, -0.5, -0.8, -math.pi / 6, -math.pi / 9, -1, math.pi / 60],
+    [-0.1, -0.1, -0.04, -0.15, -0.5, -0.8, -
+        math.pi / 6, -math.pi / 9, -1, math.pi / 60],
     [0.1, 0.1, 0.04, 0.3, 0.5, 0.8, math.pi / 6, math.pi / 9, 1, math.pi / 6]]
 )
 
@@ -84,3 +86,4 @@ process_position = 0.0
 process_state = 0
 touch_force = [0, 0, 0, 0]
 touch_force_max = [0, 0, 0, 0]
+

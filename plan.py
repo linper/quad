@@ -56,7 +56,6 @@ class Plan:
         self.adj = self.adj + np.array([x, y, z])
         # print(f"pos:{self.leg.position[2]} adjust:{z} total:{self.adj[2]}")
 
-
     def plan_steps(self):
         time = np.array([i.t for i in self.points])
         data_x = np.array([i.x for i in self.points])
@@ -76,7 +75,8 @@ class Plan:
         dy = akima(np.array(time_steps), np.array(spline_y))
         dz = akima(np.array(time_steps), np.array(spline_z))
 
-        steps = [DestPoint([x, y, z], t, dx_, dy_, dz_) for x, y, z, t, dx_, dy_, dz_ in zip(spline_x, spline_y, spline_z, time_steps, dx, dy, dz)]
+        steps = [DestPoint([x, y, z], t, dx_, dy_, dz_) for x, y, z, t, dx_, dy_, dz_ in zip(
+            spline_x, spline_y, spline_z, time_steps, dx, dy, dz)]
         self.steps = steps
 
     def step(self):
@@ -90,23 +90,8 @@ class Plan:
         self.steps.pop(0)
 
     def step_zero(self):
-        self.leg.position = np.array([self.cur.x, self.cur.y, self.cur.z]) + self.adj
-
-    def check_damp(self):
-        l_idx = self.leg.idx
-        l_tf = self.leg.body.sens_info.touch_force[l_idx]
-
-        damp_val = p.getJointState(self.leg.body.model, self.leg.dampener)[0]
-
-        damp_val_n = damp_val / T_RAD
-        # u_thr = 0.7 * T_RAD
-        # l_thr = 0.3 * T_RAD
-
-        dst = 0.0
-        if damp_val_n < 0.85:
-            dst = 0.5 * (damp_val - T_RAD)
-
-        return bool(l_tf), dst
+        self.leg.position = np.array(
+            [self.cur.x, self.cur.y, self.cur.z]) + self.adj
 
     def plot(self):
         plt.figure()

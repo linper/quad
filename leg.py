@@ -39,7 +39,6 @@ class Leg:
         target = np.copy(self.position) - self.base_off
         # target = np.copy(self.position)
 
-
         base_st = p.getJointInfo(self.body.model, self.base)
         shoulder_st = p.getJointInfo(self.body.model, self.shoulder)
         knee_st = p.getJointInfo(self.body.model, self.knee)
@@ -55,11 +54,14 @@ class Leg:
                                       (-0.03 * math.cos(gama) + self.dir[2] * 0.01 * math.sin(gama))])
         target = target - shoulder_position
         leg_length = np.linalg.norm(target)
-        max_leg_len = self.link_len * math.sqrt(5 - 4 * math.cos(abs(knee_st[9])))
-        min_leg_len = self.link_len * math.sqrt(5 - 4 * math.cos(abs(knee_st[8])))
+        max_leg_len = self.link_len * \
+            math.sqrt(5 - 4 * math.cos(abs(knee_st[9])))
+        min_leg_len = self.link_len * \
+            math.sqrt(5 - 4 * math.cos(abs(knee_st[8])))
 
         if max_leg_len > leg_length > min_leg_len:  # middle
-            e = math.acos(1.25 - ((leg_length ** 2) / (4 * self.link_len ** 2)))
+            e = math.acos(
+                1.25 - ((leg_length ** 2) / (4 * self.link_len ** 2)))
             alpha = self.dir[0] * (math.pi - e)
         elif leg_length >= max_leg_len:  # outer
             alpha = knee_st[8]
@@ -67,7 +69,8 @@ class Leg:
             alpha = knee_st[9]
 
         fi = math.asin(target[0] / leg_length)
-        theta = math.asin(min(1, max(-1, (self.link_len * math.sin(alpha)) / leg_length)))
+        theta = math.asin(
+            min(1, max(-1, (self.link_len * math.sin(alpha)) / leg_length)))
 
         if shoulder_st[8] <= -fi + theta * -1 <= shoulder_st[9]:
             beta = -fi + theta * -1  # VII
@@ -78,23 +81,52 @@ class Leg:
 
         return [alpha, beta, gama]
 
+    def check_damp(self):
+        l_idx = self.idx
+        l_tf = self.body.sens_info.touch_force[l_idx]
+
+        damp_val = p.getJointState(self.body.model, self.dampener)[0]
+
+        damp_val_n = damp_val / T_RAD
+        # u_thr = 0.7 * T_RAD
+        # l_thr = 0.3 * T_RAD
+
+        dst = 0.0
+        if damp_val_n < 0.85:
+            dst = 1.0 * (damp_val - T_RAD)
+            # dst = 0.5 * (damp_val - T_RAD)
+
+        return bool(l_tf), dst
+
+    # def limit_pos(self):
+        # if self.position[2] < MAX_DIP:
+        # self.position[2] = MAX_DIP
+
+        # if self.position[2] > MIN_DIP:
+        # self.position[2] = MIN_DIP
 
     def update(self, q):
+        # self.limit_pos()
+
         angles = self.get_angles()
         damp_state = p.getJointState(q.model, self.dampener)
 
         p.setJointMotorControl2(q.model, self.base, p.POSITION_CONTROL, angles[2],
-                                force=p.getJointInfo(q.model, self.base)[10] / 100,
-                                maxVelocity=p.getJointInfo(q.model, self.base)[11])
+                                force=p.getJointInfo(q.model, self.base)[
+            10] / 100,
+            maxVelocity=p.getJointInfo(q.model, self.base)[11])
         p.setJointMotorControl2(q.model, self.shoulder, p.POSITION_CONTROL, angles[1],
-                                force=p.getJointInfo(q.model, self.shoulder)[10] / 100,
-                                maxVelocity=p.getJointInfo(q.model, self.shoulder)[11])
+                                force=p.getJointInfo(q.model, self.shoulder)[
+            10] / 100,
+            maxVelocity=p.getJointInfo(q.model, self.shoulder)[11])
         p.setJointMotorControl2(q.model, self.knee, p.POSITION_CONTROL, angles[0],
-                                force=p.getJointInfo(q.model, self.knee)[10] / 100,
-                                maxVelocity=p.getJointInfo(q.model, self.knee)[11])
+                                force=p.getJointInfo(q.model, self.knee)[
+            10] / 100,
+            maxVelocity=p.getJointInfo(q.model, self.knee)[11])
         p.setJointMotorControl2(q.model, self.heel, p.POSITION_CONTROL, -angles[0],
-                                force=p.getJointInfo(q.model, self.heel)[10] / 100,
-                                maxVelocity=p.getJointInfo(q.model, self.heel)[11])
+                                force=p.getJointInfo(q.model, self.heel)[
+            10] / 100,
+            maxVelocity=p.getJointInfo(q.model, self.heel)[11])
         p.setJointMotorControl2(q.model, self.dampener, controlMode=p.POSITION_CONTROL,
                                 targetPosition=0.0,
                                 force=self.stiffness_c * (damp_state[0] / self.damp_len))
@@ -109,4 +141,3 @@ class Leg:
         # self.fsm.execute()
 
         return
-
