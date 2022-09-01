@@ -36,6 +36,7 @@ class SensInfo:
     def __init__(self, q):
         self.host: Quad = q
         self.touch_force = np.zeros(4, dtype=int)
+        self.damp = np.zeros(4, dtype=float)
         self.base_force_vector = np.zeros(3, dtype=float)
         self.bf_hist = [np.zeros(3, dtype=float)]
         self.bf_max = 35
@@ -177,6 +178,7 @@ class Quad:
             base_orientation_matrix[i // 3][i % 3] = base_orientation_1d[i]
         self.sens_info.base_frame_orientation_matrix = self.sens_info.get_base_frame_orientation_matrix()
         for i, l in enumerate(self.legs):
+            self.sens_info.damp[l.idx] = p.getJointState(self.model, l.dampener)[0] / T_RAD
             f = p.getJointState(self.model, l.sensor)[2][2]
             if np.isnan(f):
                 f = 0.0

@@ -4,6 +4,7 @@ import pybullet as p
 from fsm import FSM, FSMState
 from plan import *
 from plan import DestPoint
+from pidc import PIDC
 
 
 class Leg:
@@ -21,6 +22,13 @@ class Leg:
         self.base_off = bo
         self.plan = Plan(self)
         self.fsm = FSM(self)
+        self.balance_pid: PIDC = PIDC(-0.0, 0.00, -0.000, 1 / 240)
+        # self.balance_pid: PIDC = PIDC(-0.025, 0.00, -0.000, 1 / 240)
+        # self.balance_pid: PIDC = PIDC(-0.015, 0.00, -0.0002, 1 / 240)
+        # self.balance_pid: PIDC = PIDC(-0.015, 0.002, -0.0002, 1 / 240)
+        # self.balance_pid: PIDC = PIDC(-0.015, 0.0, -0.00035, 1 / 240)
+        self.touch_pid: PIDC = PIDC(0.24, 0.0, 0.0, 1 / 240)
+        # self.balance_pid = PIDC2(-0.1, -0.1, 0.0, 0.0, 0.0, 0.0, 1 / 240)
         self.base = base
         self.shoulder = shoulder
         self.knee = knee
@@ -33,7 +41,8 @@ class Leg:
         self.sh_h = 0.03
         self.link_len = 0.1
         self.damp_len = 0.012
-        self.stiffness_c = 2.5
+        # self.stiffness_c = 500
+        self.stiffness_c = 0.00005
 
     def get_angles(self) -> list:
         target = np.copy(self.position) - self.base_off
@@ -91,12 +100,14 @@ class Leg:
         # u_thr = 0.7 * T_RAD
         # l_thr = 0.3 * T_RAD
 
-        dst = 0.0
-        if damp_val_n < 0.85:
-            dst = 1.0 * (damp_val - T_RAD)
-            # dst = 0.5 * (damp_val - T_RAD)
+        soft_hit = True if damp_val_n > SOFT_HIT_THR else False
 
-        return bool(l_tf), dst
+        # dst = 0.0
+        # if damp_val_n < 0.85:
+        #     dst = 1.0 * (damp_val - T_RAD)
+
+        dst = 1.0 * (damp_val - T_RAD)
+        return bool(l_tf > 0), soft_hit, dst
 
     # def limit_pos(self):
         # if self.position[2] < MAX_DIP:
@@ -129,6 +140,7 @@ class Leg:
             maxVelocity=p.getJointInfo(q.model, self.heel)[11])
         p.setJointMotorControl2(q.model, self.dampener, controlMode=p.POSITION_CONTROL,
                                 targetPosition=0.0,
+                                # force=self.stiffness_c * (1-(damp_state[0] / self.damp_len)))
                                 force=self.stiffness_c * (damp_state[0] / self.damp_len))
 
     def make_plan(self, dest: DestPoint, state: FSMState):

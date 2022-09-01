@@ -47,9 +47,12 @@ class GrView:
 
     def draw_leg_circle(self, leg, q: Quad):
         force = q.sens_info.touch_force[leg.idx]
+        damp_val_n = q.sens_info.damp[leg.idx]
 
         if force > 0:
             color = "green"
+        elif damp_val_n > SOFT_HIT_THR:
+            color = "yellow"
         else:
             color = "red"
 
@@ -59,8 +62,9 @@ class GrView:
             np.array([self.height / 2, self.width / 2, 0])
         self.space.create_oval(pt[1] - r, pt[0] - r,
                                pt[1] + r, pt[0] + r, fill=color)
+        leg_name_abr = "".join([c[0] for c in leg.name.split("_")])
         self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
-                               anchor=W, text=f"{leg.name}:{leg.fsm.state_str()}")
+                               anchor=W, text=f"{leg_name_abr}:{leg.fsm.state_str()}:{round(leg.plan.adj[2], 3)}")
 
     def draw_circle(self, pos, color):
         r = 6

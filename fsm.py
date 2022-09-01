@@ -161,7 +161,7 @@ class FSM:
 
             p.need_plan = False
 
-        hits, _ = self.leg.check_damp()
+        _, hits, _ = self.leg.check_damp()
 
         if hits:
             p.reset()
@@ -195,7 +195,7 @@ class FSM:
 
             p.need_plan = False
 
-        hits, _ = self.leg.check_damp()
+        _, hits, _ = self.leg.check_damp()
 
         if hits or len(p.steps) == 0:
             p.reset()
@@ -228,7 +228,7 @@ class FSM:
 
             p.need_plan = False
 
-        hits, adj = self.leg.check_damp()
+        _, hits, adj = self.leg.check_damp()
 
         if len(p.steps) == 0:
             p.reset()
@@ -265,7 +265,7 @@ class FSM:
 
             p.need_plan = False
 
-        hits, _ = self.leg.check_damp()
+        _, hits, _ = self.leg.check_damp()
 
         if hits:
             p.reset()
@@ -282,8 +282,8 @@ class FSM:
     def act_pending(self):
         p = self.leg.plan
 
-        balance_diff = get_balance_diff(self.leg)
-        p.adjust(0, 0, balance_diff)
+        balance = get_balance(self.leg)
+        p.set_adjust(0, 0, balance)
         p.step_zero()
         
 

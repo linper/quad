@@ -253,6 +253,10 @@ def get_rotation_matrix_from_two_vectors(a, b):
 
     return matrix
 
+def get_4x4_from_3x3_mat(arr: np.ndarray):
+    n_arr = np.identity(4, dtype=float)
+    n_arr[:3, :3] = arr
+    return n_arr
 
 def strech_vector_to(v, lenght):
     lv = np.linalg.norm(v)
