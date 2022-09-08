@@ -64,18 +64,6 @@ class Plan:
         self.adj = new_adj
         # print(f"pos:{self.leg.position[2]} adjust:{z} total:{self.adj[2]}")
 
-    def set_adjust(self, x=0.0, y=0.0, z=0.0):
-        new_adj = np.array([x, y, z])
-
-        if new_adj[2] + self.cur.z < MAX_DIP:
-            new_adj[2] = MAX_DIP - self.cur.z
-
-        if new_adj[2] + self.cur.z > MIN_DIP:
-            new_adj[2] = MIN_DIP - self.cur.z
-
-        self.adj = new_adj
-        # print(f"pos:{self.leg.position[2]} adjust:{z} total:{self.adj[2]}")
-
     def plan_steps(self):
         time = np.array([i.t for i in self.points])
         data_x = np.array([i.x for i in self.points])

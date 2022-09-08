@@ -54,11 +54,12 @@ def get_lean_diff(leg):
 
     return leg_dif[2]
 
+
 def get_balance_base(q, cof):
     res = np.zeros(4, dtype=float)
 
-    force_r_mat = get_4x4_from_3x3_mat(get_rotation_matrix_from_two_vectors(
-        q.sens_info.base_force_vector, np.array([0.0, 0.0, -1.0])))
+    bfo_mat = get_4x4_from_3x3_mat(q.sens_info.base_frame_orientation_matrix
+                                   )
     height_mat = np.identity(4, dtype=float)
 
     height_mat[2, 3] = LEG_TAR_H - q.avg_leg_h  # making shift matrix in z axis
@@ -70,7 +71,7 @@ def get_balance_base(q, cof):
 
         leg_pos_mod = np.ones(4, dtype=float)
         leg_pos_mod[:3] = l.position
-        leg_pos_mod = force_r_mat.dot(leg_pos_mod)
+        leg_pos_mod = bfo_mat.dot(leg_pos_mod)
         leg_pos_mod = height_mat.dot(leg_pos_mod)
 
         leg_dif = leg_pos_mod[:3] - l.position
@@ -79,17 +80,19 @@ def get_balance_base(q, cof):
 
     return res
 
+
 def get_touch_diff(leg):
     h_hits, s_hits, adj = leg.check_damp()
     drop = 0.0
     touch = 0.0
 
     if s_hits and ADJUST_SENS < abs(adj):
-        drop = adj
+        touch = adj
     elif not s_hits:
-        touch = -T_RAD
+        drop = -T_RAD
 
     return drop, touch
+
 
 balance_cache = np.zeros(4, dtype=float)
 balance_manager = np.zeros(4)
@@ -98,60 +101,32 @@ balance_manager = np.zeros(4)
 def get_balance(leg):
     global balance_cache, balance_manager
 
-    base_cof = 0.015
-    touch_cof = 0.24
-    drop_cof = 0.24
-
     if balance_manager[leg.idx] == 1:
         balance_manager = np.zeros(4)
+        balance_cache = np.zeros(4, dtype=float)
 
         balance_diffs = np.zeros((BalanceAttrs.MAX, 4), dtype=float)
 
         base_part = get_balance_base(leg.body, 1.0)
 
         for i, l in enumerate(leg.body.legs):
-            balance_diffs[BalanceAttrs.DROP, i], balance_diffs[BalanceAttrs.TOUCH, i] = get_touch_diff(l)
+            balance_diffs[BalanceAttrs.DROP,
+                          i], balance_diffs[BalanceAttrs.TOUCH, i] = get_touch_diff(l)
             balance_diffs[BalanceAttrs.LEAN, i] = get_lean_diff(l)
-            balance_diffs[BalanceAttrs.IMP,
-                          i], balance_diffs[BalanceAttrs.IMP_INV, i] = get_importance(l)
+            _, balance_diffs[BalanceAttrs.IMP_INV, i] = get_importance(l)
             balance_diffs[BalanceAttrs.HEIGHT, i] = (
                 LEG_TAR_H - leg.body.avg_leg_h)
 
-            if balance_diffs[BalanceAttrs.TOUCH][i] != 0:
-                a = 0
-
             if balance_diffs[BalanceAttrs.IMP_INV][i] > 0.33:
-                balance_cache[i] = l.balance_pid.eval(0.0, base_part[i])
+                balance_cache[i] += l.balance_pid.eval(
+                    balance_cache[i], balance_cache[i] + base_part[i])
+                balance_cache[i] += l.touch_pid.eval(
+                    balance_cache[i], balance_cache[i])
             else:
-                balance_cache[i] = l.balance_pid.eval(0.0, base_part[i]) + \
-                l.touch_pid.eval(0.0, balance_diffs[BalanceAttrs.TOUCH][i] + balance_diffs[BalanceAttrs.DROP][i])
-
-        # base_part = get_balance_base(leg.body, base_cof)
-        # touch_part = touch_cof * balance_diffs[BalanceAttrs.TOUCH]
-        # drop_part = drop_cof * balance_diffs[BalanceAttrs.DROP]
-        #
-        #
-        # for i in range(4):
-        #     if balance_diffs[BalanceAttrs.IMP_INV][i] > 0.33:
-        #         balance_cache[i] = base_part[i]
-        #     else:
-        #         balance_cache[i] = base_part[i] + touch_part[i] + drop_part[i]
-
-
-        for i, l in enumerate(leg.body.legs):
-            print(
-            f"{l.name}:"
-            f"{round(l.position[2], 6)} => "
-            f"{round(balance_cache[i], 6)}:")
-            # print(
-            # f"{l.name}:"
-            # f"{round(balance_diffs[BalanceAttrs.IMP_INV][i], 6)} => "
-            # f"{round(balance_diffs[BalanceAttrs.LEAN][i], 6)}:"
-            # f"{round(balance_diffs[BalanceAttrs.TOUCH][i], 6)}:"
-            # f"{round(balance_diffs[BalanceAttrs.HEIGHT][i], 6)} => "
-            # # f"{round(touch_part[i], 6)} =>"
-            # f"{round(balance_cache[i], 6)}")
-        print()
+                balance_cache[i] += l.balance_pid.eval(
+                    balance_cache[i], balance_cache[i] + base_part[i])
+                balance_cache[i] += l.touch_pid.eval(
+                    balance_cache[i], balance_cache[i] + balance_diffs[BalanceAttrs.TOUCH][i] + balance_diffs[BalanceAttrs.DROP][i])
 
     balance_manager[leg.idx] = 1
 

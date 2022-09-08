@@ -22,13 +22,8 @@ class Leg:
         self.base_off = bo
         self.plan = Plan(self)
         self.fsm = FSM(self)
-        self.balance_pid: PIDC = PIDC(-0.0, 0.00, -0.000, 1 / 240)
-        # self.balance_pid: PIDC = PIDC(-0.025, 0.00, -0.000, 1 / 240)
-        # self.balance_pid: PIDC = PIDC(-0.015, 0.00, -0.0002, 1 / 240)
-        # self.balance_pid: PIDC = PIDC(-0.015, 0.002, -0.0002, 1 / 240)
-        # self.balance_pid: PIDC = PIDC(-0.015, 0.0, -0.00035, 1 / 240)
-        self.touch_pid: PIDC = PIDC(0.24, 0.0, 0.0, 1 / 240)
-        # self.balance_pid = PIDC2(-0.1, -0.1, 0.0, 0.0, 0.0, 0.0, 1 / 240)
+        self.balance_pid: PIDC = PIDC(0.06, 0., 0.001, 1 / 240)
+        self.touch_pid: PIDC = PIDC(0.35, 0., 0., 1 / 240)
         self.base = base
         self.shoulder = shoulder
         self.knee = knee
@@ -41,7 +36,6 @@ class Leg:
         self.sh_h = 0.03
         self.link_len = 0.1
         self.damp_len = 0.012
-        # self.stiffness_c = 500
         self.stiffness_c = 0.00005
 
     def get_angles(self) -> list:
