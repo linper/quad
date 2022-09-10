@@ -22,7 +22,8 @@ class Leg:
         self.base_off = bo
         self.plan = Plan(self)
         self.fsm = FSM(self)
-        self.balance_pid: PIDC = PIDC(0.06, 0., 0.001, 1 / 240)
+        self.balance_pid: PIDC = PIDC(0.06, 0., 0.0005, 1 / 240)
+        # self.balance_pid: PIDC = PIDC(0.06, 0., 0.001, 1 / 240)
         self.touch_pid: PIDC = PIDC(0.35, 0., 0., 1 / 240)
         self.base = base
         self.shoulder = shoulder

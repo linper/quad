@@ -130,4 +130,4 @@ def get_balance(leg):
 
     balance_manager[leg.idx] = 1
 
-    return balance_cache[leg.idx]
+    return np.array([0.0, 0.0, balance_cache[leg.idx]])

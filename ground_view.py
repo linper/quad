@@ -13,6 +13,33 @@ import time
 from misc import ActCmd
 
 
+class GoPoint:
+    def __init__(self, pos: np.ndarray):
+        self.pos: np.ndarray = pos
+
+
+class GoTask:
+    def __init__(self, idx: int, do_lift: bool = False):
+        self.points: list = []
+        self.idx: int = idx
+        self.do_lift: bool = do_lift
+        self.active: bool = False
+
+    def add_pt(self, pt: GoPoint):
+        self.points.append(pt)
+
+    def del_pt(self, idx: int):
+        self.points.pop(idx)
+
+    def toggle_lift(self):
+        self.do_lift = not self.do_lift
+
+    def clear(self):
+        self.points.clear()
+        self.do_lift = False
+        self.active = False
+
+
 class SPoint:
     def __init__(self, x, y, color):
         self.x = x
@@ -31,12 +58,14 @@ class GrView:
         self.width = 600
         self.path_sent = False
         self.root.title = "ground view"
+        self.q: Quad
         self.space = Canvas(self.root, background="white",
                             height=self.height, width=self.width)
         self.space.bind("<Button-1>", self.btn_clk)
         self.space.bind("<Double-Button-1>", self.btn_dbl_clk)
         self.space.grid(row=0, column=0)
         self.saved: list = []
+        self.tasks: list = [GoTask(0), GoTask(1), GoTask(2), GoTask(3)]
 
         b = Button(self.root, text="Go", command=self.send_go_cmd)
         b.place(x=0, y=self.height - 20)
@@ -92,11 +121,11 @@ class GrView:
             np.array([1, 1, 1]) + \
             np.array([self.height / 2, self.width / 2, 0])
         reduced = self.mul * q.sens_info.t_force_info.pos * \
-        np.array([1, 1, 1]) + \
-        np.array([self.height / 2, self.width / 2, 0])
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
         # reduced = self.mul * q.sens_info.base_force_vector * \
-            # np.array([1, 1, 1]) + \
-            # np.array([self.height / 2, self.width / 2, 0])
+        # np.array([1, 1, 1]) + \
+        # np.array([self.height / 2, self.width / 2, 0])
 
         lk, lb = line_cof(cpt[1], cpt[0], lpt[1], lpt[0])
         rk = -1 / lk
@@ -162,9 +191,32 @@ class GrView:
         self.space.create_line(f[1], f[0], sc[1], sc[0], width=4, fill="blue")
         self.space.pack()
 
-    def draw_saved(self):
-        for s in self.saved:
-            self.draw_circle2(s)
+    def draw_tasks(self):
+        r = 15
+        for i, t in enumerate(self.tasks):
+            leg = self.q.legs[i]
+            color = "red" if t.do_lift else "blue"
+
+            last_pt = self.mul * leg.position * \
+                np.array([1, 1, 1]) + \
+                np.array([self.height / 2, self.width / 2, 0])
+
+            if t.active:
+                self.space.create_oval(last_pt[1] - r, last_pt[0] - r,
+                                       last_pt[1] + r, last_pt[0] + r, width=3, outline=color)
+
+            for p in t.points:
+                pt = self.mul * p.pos * \
+                    np.array([1, 1, 1]) + \
+                    np.array([self.height / 2, self.width / 2, 0])
+
+                self.space.create_line(
+                    last_pt[1], last_pt[0], pt[1], pt[0], width=3, fill=color)
+                self.draw_circle(pt, color)
+
+                last_pt = pt
+
+        self.space.pack()
 
     def send_go_cmd(self):
         while self.q_to.full():
@@ -172,9 +224,9 @@ class GrView:
             time.sleep(0.05)
 
         print("Go")
-        saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
-            [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
-        self.q_to.put(saved_adj)
+        # saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
+        # [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
+        self.q_to.put(self.tasks)
         self.path_sent = True
 
     def send_clear_cmd(self):
@@ -183,7 +235,11 @@ class GrView:
             time.sleep(0.05)
 
         print("clear")
-        self.saved.clear()
+
+        # self.saved.clear()
+        for t in self.tasks:
+            t.clear()
+
         self.q_cmd.put(ActCmd.CLEAR)
 
     def send_plot_cmd(self):
@@ -195,22 +251,60 @@ class GrView:
         self.q_cmd.put(ActCmd.PLOT)
 
     def btn_clk(self, ev):
-        new_path_col = "blue"
-        # print("clicked")
-        s = SPoint(ev.x, ev.y, new_path_col)
-        if self.path_sent:
-            self.path_sent = False
-            self.saved.clear()
+        err = 10
 
-        self.saved.append(s)
-        self.draw_circle2(s)
+        #  Returning on existing point or leg hit
+        for i, t in enumerate(self.tasks):
+            leg = self.q.legs[i]
+            s = self.mul * leg.position * \
+                np.array([1, 1, 1]) + \
+                np.array([self.height / 2, self.width / 2, 0])
+
+            if abs(s[1] - ev.x) <= err and abs(s[0] - ev.y) <= err:
+                return
+
+            for p in t.points:
+                s = self.mul * p.pos * \
+                    np.array([1, 1, 1]) + \
+                    np.array([self.height / 2, self.width / 2, 0])
+
+                if abs(s[1] - ev.x) <= err and abs(s[0] - ev.y) <= err:
+                    return
+
+        for t in self.tasks:
+            if t.active:
+                pos = (np.array([ev.y, ev.x, 0.0]) - np.array(
+                    [self.height / 2, self.width / 2, 0])) / self.mul
+                t.add_pt(GoPoint(pos))
 
     def btn_dbl_clk(self, ev):
         # print("dbl clicked")
-        err = 6
-        for i, s in enumerate(self.saved):
-            if abs(s.x - ev.x) <= err and abs(s.y - ev.y) <= err:
-                self.saved.pop(i)
+        err = 10
+
+        for i, t in enumerate(self.tasks):
+            leg = self.q.legs[i]
+            s = self.mul * leg.position * \
+                np.array([1, 1, 1]) + \
+                np.array([self.height / 2, self.width / 2, 0])
+
+            if abs(s[1] - ev.x) <= err and abs(s[0] - ev.y) <= err:
+                if not t.active:
+                    t.active = True
+
+                    # disabling rest of tasks
+                    for ts in self.tasks:
+                        if ts.idx != t.idx:
+                            ts.active = False
+                else:
+                    t.toggle_lift()
+
+            for j, p in enumerate(t.points):
+                s = self.mul * p.pos * \
+                    np.array([1, 1, 1]) + \
+                    np.array([self.height / 2, self.width / 2, 0])
+
+                if abs(s[1] - ev.x) <= err and abs(s[0] - ev.y) <= err:
+                    t.points.pop(j)
 
     def update(self, q: Quad):
         self.root.update()
@@ -226,7 +320,7 @@ class GrView:
 
         self.draw_s_sines(q)
         self.draw_force(q)
-        self.draw_saved()
+        self.draw_tasks()
 
     def start(self):
         q: Quad
@@ -237,6 +331,8 @@ class GrView:
             else:
                 while not self.q_from.empty():
                     q = self.q_from.get()
+
+                self.q = q
                 self.update(q)
                 #     q = self.q_from.get()
                 # self.update(self.q_from.get())

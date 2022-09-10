@@ -57,15 +57,15 @@ class FSM:
         self.map[FSMAction.HIT][FSMState.LANDING] = FSMState.PENDING
 
         self.map[FSMAction.NO_ACT][FSMState.TRAVERSING] = FSMState.TRAVERSING
-        self.map[FSMAction.DROP][FSMState.TRAVERSING] = FSMState.DROPPING
+        # self.map[FSMAction.DROP][FSMState.TRAVERSING] = FSMState.DROPPING
         self.map[FSMAction.END][FSMState.TRAVERSING] = FSMState.PENDING
 
-        self.map[FSMAction.NO_ACT][FSMState.DROPPING] = FSMState.DROPPING
-        self.map[FSMAction.HIT][FSMState.DROPPING] = FSMState.TRAVERSING
-        self.map[FSMAction.END][FSMState.DROPPING] = FSMState.PENDING
+        # self.map[FSMAction.NO_ACT][FSMState.DROPPING] = FSMState.DROPPING
+        # self.map[FSMAction.HIT][FSMState.DROPPING] = FSMState.TRAVERSING
+        # self.map[FSMAction.END][FSMState.DROPPING] = FSMState.PENDING
 
         self.map[FSMAction.NO_ACT][FSMState.PENDING] = FSMState.PENDING
-        self.map[FSMAction.DROP][FSMState.PENDING] = FSMState.DROPPING
+        # self.map[FSMAction.DROP][FSMState.PENDING] = FSMState.DROPPING
 
     def state_str(self):
         str_dict = {
@@ -161,7 +161,7 @@ class FSM:
 
             p.need_plan = False
 
-        _, hits, _ = self.leg.check_damp()
+        hits, _, _ = self.leg.check_damp()
 
         if hits:
             p.reset()
@@ -195,7 +195,7 @@ class FSM:
 
             p.need_plan = False
 
-        _, hits, _ = self.leg.check_damp()
+        hits, _, _ = self.leg.check_damp()
 
         if hits or len(p.steps) == 0:
             p.reset()
@@ -205,7 +205,6 @@ class FSM:
 
     def act_traversing(self):
         p = self.leg.plan
-        p.adjust(0, 0, 0.05 * (LEG_TAR_H - self.leg.position[2]))
 
         if p.need_plan:
             print(f"{p.leg.name}:Traversing")
@@ -228,19 +227,12 @@ class FSM:
 
             p.need_plan = False
 
-        _, hits, adj = self.leg.check_damp()
-
         if len(p.steps) == 0:
             p.reset()
             self.next(FSMAction.END)
-        elif not hits:
-            p.reset()
-            self.next(FSMAction.DROP)
-        elif ADJUST_SENS < abs(adj):
-            p.adjust(0, 0, adj)
-            # print(f"adjusted by {[0, 0, adj]}")
-            p.step()
         else:
+            balance = get_balance(self.leg)
+            p.adjust(balance[0], balance[1], balance[2])
             p.step()
 
     def act_dropping(self):
@@ -283,7 +275,7 @@ class FSM:
         p = self.leg.plan
 
         balance = get_balance(self.leg)
-        p.adjust(0, 0, balance)
+        p.adjust(balance[0], balance[1], balance[2])
         p.step_zero()
 
         # # print("Pending")
