@@ -6,6 +6,7 @@ from enum import Enum
 MAX_HEIGHT = 1.0
 MAX_DIP = -0.35
 MIN_DIP = -0.1
+WALK_H = -0.15
 MAX_FREQ = 50
 MIN_PERIOD = 0.02
 MAX_DROP_SPEED = -0.2
@@ -14,7 +15,7 @@ T_EQL = 0.25
 ADJUST_SENS = abs(T_RAD) * 0.05
 STEP = 0.01
 LEG_TAR_H = -0.26
-SOFT_HIT_THR = 0.01
+SOFT_HIT_THR = 0.02
 
 
 # some aggregations
@@ -87,4 +88,3 @@ process_position = 0.0
 process_state = 0
 touch_force = [0, 0, 0, 0]
 touch_force_max = [0, 0, 0, 0]
-

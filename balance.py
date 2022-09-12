@@ -19,7 +19,7 @@ class BalanceAttrs(IntEnum):
 
 
 def get_importance(leg):
-    x_pos = [l.position[0] for l in leg.body.legs]
+    x_pos = [l.position[0] for l in leg.body.legs if l.do_balance]
     x_pos.append(leg.body.sens_info.t_force_info.pos[0])
     min_x_pos = functools.reduce(lambda a, b: a if a < b else b, x_pos)
     max_x_pos = functools.reduce(lambda a, b: a if a > b else b, x_pos)
@@ -28,7 +28,7 @@ def get_importance(leg):
         leg.position[0] - leg.body.sens_info.t_force_info.pos[0]) / x_pos_diff
     x_lever = 1 / x_lever_inv
 
-    y_pos = [l.position[1] for l in leg.body.legs]
+    y_pos = [l.position[1] for l in leg.body.legs if l.do_balance]
     y_pos.append(leg.body.sens_info.t_force_info.pos[1])
     min_y_pos = functools.reduce(lambda a, b: a if a < b else b, y_pos)
     max_y_pos = functools.reduce(lambda a, b: a if a > b else b, y_pos)
@@ -45,7 +45,7 @@ def get_importance(leg):
 
 def get_lean_diff(leg):
     if leg.body.sens_info.damp[leg.idx] < SOFT_HIT_THR:
-        return leg.body.avg_leg_h - leg.position[2]
+        return leg.body.sens_info.avg_leg_h - leg.position[2]
 
     force_r_mat = get_rotation_matrix_from_two_vectors(
         np.array([0.0, 0.0, -1.0]), leg.body.sens_info.base_force_vector)
@@ -62,11 +62,12 @@ def get_balance_base(q, cof):
                                    )
     height_mat = np.identity(4, dtype=float)
 
-    height_mat[2, 3] = LEG_TAR_H - q.avg_leg_h  # making shift matrix in z axis
+    # making shift matrix in z axis
+    height_mat[2, 3] = LEG_TAR_H - q.sens_info.avg_leg_h
 
     for i, l in enumerate(q.legs):
         if q.sens_info.damp[l.idx] < SOFT_HIT_THR:
-            res[i] = cof * (l.body.avg_leg_h - l.position[2])
+            res[i] = cof * (l.body.sens_info.avg_leg_h - l.position[2])
             continue
 
         leg_pos_mod = np.ones(4, dtype=float)
@@ -82,7 +83,7 @@ def get_balance_base(q, cof):
 
 
 def get_touch_diff(leg):
-    h_hits, s_hits, adj = leg.check_damp()
+    _, s_hits, adj = leg.check_damp()
     drop = 0.0
     touch = 0.0
 
@@ -110,12 +111,15 @@ def get_balance(leg):
         base_part = get_balance_base(leg.body, 1.0)
 
         for i, l in enumerate(leg.body.legs):
+            if not l.do_balance:
+                continue
+
             balance_diffs[BalanceAttrs.DROP,
                           i], balance_diffs[BalanceAttrs.TOUCH, i] = get_touch_diff(l)
             balance_diffs[BalanceAttrs.LEAN, i] = get_lean_diff(l)
             _, balance_diffs[BalanceAttrs.IMP_INV, i] = get_importance(l)
             balance_diffs[BalanceAttrs.HEIGHT, i] = (
-                LEG_TAR_H - leg.body.avg_leg_h)
+                LEG_TAR_H - leg.body.sens_info.avg_leg_h)
 
             if balance_diffs[BalanceAttrs.IMP_INV][i] > 0.33:
                 balance_cache[i] += l.balance_pid.eval(

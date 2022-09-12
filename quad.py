@@ -35,6 +35,7 @@ class TForceInfo:
 class SensInfo:
     def __init__(self, q):
         self.host: Quad = q
+        self.avg_leg_h: float = LEG_TAR_H
         self.touch_force = np.zeros(4, dtype=int)
         self.damp = np.zeros(4, dtype=float)
         self.base_force_vector = np.zeros(3, dtype=float)
@@ -141,6 +142,53 @@ class SensInfo:
                 lambda a, b: a + b, reduced_arr) / len(reduced_arr)
             self.t_force_info = TForceInfo(reduced, state)
 
+    def update(self):
+        # base position
+        self.base_position = np.array(
+            p.getBasePositionAndOrientation(self.host.model)[0])
+
+        # base and base frame orientation matrix
+        self.base_orientation = np.array(
+            p.getEulerFromQuaternion(p.getBasePositionAndOrientation(self.host.model)[1]))
+        base_orientation_1d = np.array(p.getMatrixFromQuaternion(
+            p.getBasePositionAndOrientation(self.host.model)[1]))
+        for i in range(9):
+            base_orientation_matrix[i // 3][i % 3] = base_orientation_1d[i]
+        self.base_frame_orientation_matrix = self.get_base_frame_orientation_matrix()
+
+        # damp and touch force
+        for i, l in enumerate(self.host.legs):
+            self.damp[l.idx] = p.getJointState(
+                self.host.model, l.dampener)[0] / T_RAD
+            f = p.getJointState(self.host.model, l.sensor)[2][2]
+            if np.isnan(f):
+                f = 0.0
+                print(f"force was nan")
+            self.touch_force[l.idx] = -f
+
+        # base force vector
+        b_force = -np.array(p.getJointState(self.host.model,
+                            self.host.sensor)[2][slice(3)])
+        if len(self.bf_hist) >= self.bf_max:
+            self.bf_hist.pop(0)
+
+        # IDK whqt this is
+        self.bf_hist.append(b_force)
+
+        # 'base_force_vector' is running average of last 'bf_max' b_force' values
+        self.base_force_vector = functools.reduce(lambda a, b: a + b, self.bf_hist) / len(
+            self.bf_hist)
+
+        # touch force vector
+        self.update_t_force()
+
+        self.update_s()
+
+        # average balanced leg height
+        ahl = [l.position[2] + l.plan.adj[2]
+               for l in self.host.legs if l.do_balance]
+        self.avg_leg_h = np.average(np.array(ahl)) if len(ahl) else MAX_DIP
+
 
 class Quad:
     def __init__(self, model, fll, frl, bll, brl, sensor):
@@ -155,7 +203,6 @@ class Quad:
         self.legs = [fll, frl, bll, brl]
         self.legs_cw = [fll, frl, brl, bll]
         self.sensors = [fll.sensor, frl.sensor, bll.sensor, brl.sensor, sensor]
-        self.avg_leg_h: float = LEG_TAR_H
 
         for i, l in enumerate(self.legs):
             l.idx = i
@@ -165,45 +212,29 @@ class Quad:
             self.legs_cw[i].prev = self.legs_cw[i-1]
             self.legs_cw[i].next = self.legs_cw[i+1]
 
-    # gets info from sensors
+    def set_target(self, tasks):
+        pace = 1.0
+        for t in tasks:
+            l = self.legs[t.idx]
 
-    def update_sensor_info(self):
-        self.sens_info.base_position = np.array(
-            p.getBasePositionAndOrientation(self.model)[0])
-        self.sens_info.base_orientation = np.array(
-            p.getEulerFromQuaternion(p.getBasePositionAndOrientation(self.model)[1]))
-        base_orientation_1d = np.array(p.getMatrixFromQuaternion(
-            p.getBasePositionAndOrientation(self.model)[1]))
-        for i in range(9):
-            base_orientation_matrix[i // 3][i % 3] = base_orientation_1d[i]
-        self.sens_info.base_frame_orientation_matrix = self.sens_info.get_base_frame_orientation_matrix()
-        for i, l in enumerate(self.legs):
-            self.sens_info.damp[l.idx] = p.getJointState(self.model, l.dampener)[0] / T_RAD
-            f = p.getJointState(self.model, l.sensor)[2][2]
-            if np.isnan(f):
-                f = 0.0
-                print(f"force was nan")
-            self.sens_info.touch_force[l.idx] = -f
-            # self.sens_info.touch_force[l.idx] = -p.getJointState(self.model, l.sensor)[2][2]
+            if len(t.points) == 0:
+                l.make_plan(
+                    DestPoint(np.zeros(3, dtype=float), pace), FSMState.PENDING)
+                continue
 
-        b_force = -np.array(p.getJointState(self.model,
-                            self.sensor)[2][slice(3)])
-        if len(self.sens_info.bf_hist) >= self.sens_info.bf_max:
-            self.sens_info.bf_hist.pop(0)
+            act = FSMState.ASCENDING if t.do_lift else FSMState.TRAVERSING
 
-        self.sens_info.bf_hist.append(b_force)
-        # 'base_force_vector' is running average of last 'bf_max' b_force' values
-        self.sens_info.base_force_vector = functools.reduce(lambda a, b: a + b, self.sens_info.bf_hist) / len(
-            self.sens_info.bf_hist)
-        self.sens_info.update_t_force()
-        self.sens_info.update_s()
+            l_target = t.points[0].pos  # TODO add multiple targets
+            # l_target[2] = l.def_pos[2]
+            # l_target = l.def_pos + t.points[0].pos  # TODO add multiple targets
+            l.make_plan(DestPoint(l_target, pace), act)
 
-    def set_target(self, lst):
-        if len(lst) == 0:
-            target = np.zeros(3, dtype=float)
-        else:
-            target = lst[0]  # for now
+    # def set_target(self, lst):
+        # if len(lst) == 0:
+            # target = np.zeros(3, dtype=float)
+        # else:
+            # target = lst[0]  # for now
 
-        for l in self.legs:
-            l_target = l.def_pos + target
-            l.make_plan(DestPoint(l_target, 1.0), FSMState.TRAVERSING)
+        # for l in self.legs:
+            # l_target = l.def_pos + target
+            # l.make_plan(DestPoint(l_target, 1.0), FSMState.TRAVERSING)

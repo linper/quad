@@ -8,9 +8,9 @@ import pybullet as p
 class DestPoint:
     def __init__(self, pos, t, dx=None, dy=None, dz=None):
         self.t = t
-        self.x = pos[0]
-        self.y = pos[1]
-        self.z = pos[2]
+        self.x: float = pos[0]
+        self.y: float = pos[1]
+        self.z: float = pos[2]
         self.dx = dx
         self.dy = dy
         self.dz = dz

@@ -2,7 +2,7 @@ import pybullet as p
 import time
 import numpy as np
 import math
-from ground_view import tk_start, SPoint
+from ground_view import tk_start, SPoint, GoTask
 import matplotlib.pyplot as plt
 
 from consts import *
@@ -39,25 +39,18 @@ def get_commands():
         arr = q_from_gv.get()
         got_target = True
 
-    while not q_cmd.empty():
-        cmd = q_cmd.get()
-        if cmd == ActCmd.CLEAR:
-            # for l in q.legs:
-            #     l.position = l.def_pos
-            arr = [np.array([0.0, 0.0, 0.0])]
-            got_target = True
-        elif cmd == ActCmd.PLOT:
-            plot_heigths()
-            # log_data.clear()
+    # while not q_cmd.empty():
+        # cmd = q_cmd.get()
+        # if cmd == ActCmd.CLEAR:
+        # arr = [GoTask(i) for i in range(4)]
+        # got_target = True
+        # elif cmd == ActCmd.PLOT:
+        # plot_heigths()
 
-    q.update_sensor_info()
-
-    q.avg_leg_h = np.average(
-        np.array([l.position[2] + l.plan.adj[2] for l in q.legs]))
-    # print(f"leg avg. h:{q.avg_leg_h}:{[l.position[2] + l.plan.adj[2] for l in q.legs]}")
+    q.sens_info.update()
 
     log_entry = [l.position[2] + l.plan.adj[2] for l in q.legs]
-    log_entry.append(q.avg_leg_h)
+    log_entry.append(q.sens_info.avg_leg_h)
     log_data[:, log_dt_idx] = np.array(log_entry)
     log_dt_idx = (log_dt_idx + 1) % log_dt_len
 

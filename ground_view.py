@@ -64,7 +64,7 @@ class GrView:
         self.space.bind("<Button-1>", self.btn_clk)
         self.space.bind("<Double-Button-1>", self.btn_dbl_clk)
         self.space.grid(row=0, column=0)
-        self.saved: list = []
+        # self.saved: list = []
         self.tasks: list = [GoTask(0), GoTask(1), GoTask(2), GoTask(3)]
 
         b = Button(self.root, text="Go", command=self.send_go_cmd)
@@ -93,7 +93,7 @@ class GrView:
                                pt[1] + r, pt[0] + r, fill=color)
         leg_name_abr = "".join([c[0] for c in leg.name.split("_")])
         self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
-                               anchor=W, text=f"{leg_name_abr}:{leg.fsm.state_str()}:{round(leg.plan.adj[2], 3)}")
+                               anchor=W, text=f"{leg_name_abr}:{leg.fsm.state_str()}:{round(leg.plan.adj[2], 3)}:{round(leg.position[2], 3)}")
 
     def draw_circle(self, pos, color):
         r = 6
@@ -114,6 +114,8 @@ class GrView:
             lpt[1], lpt[0], reduced[1], reduced[0], width=4, fill="black")
         self.space.pack()
         self.draw_circle(reduced, q.sens_info.t_force_info.color)
+        self.space.create_text(reduced[1] - 16, reduced[0] - 26,
+                               anchor=W, text=f"{round(q.sens_info.avg_leg_h, 3)}")
 
     def draw_leg_adjust(self, leg, q: Quad):
         cpt = np.array([self.height / 2, self.width / 2, 0])
@@ -227,20 +229,23 @@ class GrView:
         # saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
         # [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
         self.q_to.put(self.tasks)
-        self.path_sent = True
+        for t in self.tasks:
+            t.active = False
 
     def send_clear_cmd(self):
-        while self.q_cmd.full():
-            print("GV cmd queue is full, sleeping...")
-            time.sleep(0.05)
+        # while self.q_cmd.full():
+        # print("GV cmd queue is full, sleeping...")
+        # time.sleep(0.05)
 
         print("clear")
 
-        # self.saved.clear()
         for t in self.tasks:
             t.clear()
+            t.add_pt(GoPoint(self.q.legs[t.idx].def_pos))
 
-        self.q_cmd.put(ActCmd.CLEAR)
+        # self.q_cmd.put(ActCmd.CLEAR)
+
+        self.send_go_cmd()
 
     def send_plot_cmd(self):
         while self.q_cmd.full():
@@ -275,6 +280,7 @@ class GrView:
             if t.active:
                 pos = (np.array([ev.y, ev.x, 0.0]) - np.array(
                     [self.height / 2, self.width / 2, 0])) / self.mul
+                pos[2] = leg.def_pos[2]
                 t.add_pt(GoPoint(pos))
 
     def btn_dbl_clk(self, ev):
@@ -312,6 +318,7 @@ class GrView:
         self.space.delete("all")
 
         self.draw_circle(np.array([self.height / 2, self.width / 2]), "black")
+        self.draw_tasks()
         self.draw_perimeter(q)
 
         for l in q.legs:
@@ -320,7 +327,6 @@ class GrView:
 
         self.draw_s_sines(q)
         self.draw_force(q)
-        self.draw_tasks()
 
     def start(self):
         q: Quad

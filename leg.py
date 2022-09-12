@@ -12,16 +12,16 @@ class Leg:
         ps = np.array(pos)
         bo = np.array(off)
 
-        self.next = None
-        self.prev = None
-        self.idx = -1
-        self.name = name
+        self.next: Leg = None
+        self.prev: Leg = None
+        self.idx: int = -1
+        self.name: str = name
         self.body = None
         self.position = ps + bo
         self.def_pos = ps + bo
         self.base_off = bo
         self.plan = Plan(self)
-        self.fsm = FSM(self)
+        self.fsm: FSM = FSM(self)
         self.balance_pid: PIDC = PIDC(0.06, 0., 0.0005, 1 / 240)
         # self.balance_pid: PIDC = PIDC(0.06, 0., 0.001, 1 / 240)
         self.touch_pid: PIDC = PIDC(0.35, 0., 0., 1 / 240)
@@ -37,7 +37,9 @@ class Leg:
         self.sh_h = 0.03
         self.link_len = 0.1
         self.damp_len = 0.012
-        self.stiffness_c = 0.00005
+        # self.stiffness_c = 0.00005
+        self.stiffness_c = 2.5
+        self.do_balance: bool = True
 
     def get_angles(self) -> list:
         target = np.copy(self.position) - self.base_off
@@ -92,28 +94,13 @@ class Leg:
         damp_val = p.getJointState(self.body.model, self.dampener)[0]
 
         damp_val_n = damp_val / T_RAD
-        # u_thr = 0.7 * T_RAD
-        # l_thr = 0.3 * T_RAD
 
         soft_hit = True if damp_val_n > SOFT_HIT_THR else False
-
-        # dst = 0.0
-        # if damp_val_n < 0.85:
-        #     dst = 1.0 * (damp_val - T_RAD)
 
         dst = 1.0 * (damp_val - T_RAD)
         return bool(l_tf > 0), soft_hit, dst
 
-    # def limit_pos(self):
-        # if self.position[2] < MAX_DIP:
-        # self.position[2] = MAX_DIP
-
-        # if self.position[2] > MIN_DIP:
-        # self.position[2] = MIN_DIP
-
     def update(self, q):
-        # self.limit_pos()
-
         angles = self.get_angles()
         damp_state = p.getJointState(q.model, self.dampener)
 
