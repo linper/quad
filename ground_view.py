@@ -24,6 +24,7 @@ class GoTask:
         self.idx: int = idx
         self.do_lift: bool = do_lift
         self.active: bool = False
+        self.dummy: bool = False
 
     def add_pt(self, pt: GoPoint):
         self.points.append(pt)
@@ -38,6 +39,8 @@ class GoTask:
         self.points.clear()
         self.do_lift = False
         self.active = False
+        self.dummy= False
+
 
 
 class SPoint:
@@ -226,11 +229,13 @@ class GrView:
             time.sleep(0.05)
 
         print("Go")
+        self.__clear_dummies()
         # saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
         # [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
         self.q_to.put(self.tasks)
         for t in self.tasks:
             t.active = False
+            t.dummy = True
 
     def send_clear_cmd(self):
         # while self.q_cmd.full():
@@ -238,6 +243,7 @@ class GrView:
         # time.sleep(0.05)
 
         print("clear")
+        self.__clear_dummies()
 
         for t in self.tasks:
             t.clear()
@@ -255,7 +261,14 @@ class GrView:
         print("plot")
         self.q_cmd.put(ActCmd.PLOT)
 
+    def __clear_dummies(self):
+        for t in self.tasks:
+            if t.dummy:
+                t.clear()
+
+
     def btn_clk(self, ev):
+        self.__clear_dummies()
         err = 10
 
         #  Returning on existing point or leg hit
@@ -284,6 +297,7 @@ class GrView:
                 t.add_pt(GoPoint(pos))
 
     def btn_dbl_clk(self, ev):
+        self.__clear_dummies()
         # print("dbl clicked")
         err = 10
 

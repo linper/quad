@@ -185,8 +185,7 @@ class SensInfo:
         self.update_s()
 
         # average balanced leg height
-        ahl = [l.position[2] + l.plan.adj[2]
-               for l in self.host.legs if l.do_balance]
+        ahl = [l.position[2] for l in self.host.legs if l.do_balance]
         self.avg_leg_h = np.average(np.array(ahl)) if len(ahl) else MAX_DIP
 
 
