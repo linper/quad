@@ -2,7 +2,7 @@ from enum import IntEnum
 import functools
 
 from plan import *
-from balance import *
+from balance import get_balance, get_walk_height
 from plan import DestPoint
 
 min_damp = 0.0
@@ -28,18 +28,27 @@ class FSMAction(IntEnum):
     MAX__ = 4
 
 
+class FSMInfo():
+    def __init__(self):
+        self.step_h: float = 0.0
+
+    def clear(self):
+        self.step_h = 0.0
+
+
 class FSM:
     def __init__(self, leg):
         self.leg = leg
-        self.cur = FSMState.STOPPED
-        self.func = {
+        self.cur: FSMState = FSMState.STOPPED
+        self.info: FSMInfo = FSMInfo()
+        self.func: dict = {
             FSMState.STOPPED: self.act_stopped,
             FSMState.ASCENDING: self.act_ascending,
             FSMState.DESCENDING: self.act_descending,
             FSMState.TRAVERSING: self.act_traversing,
             FSMState.PENDING: self.act_pending, }
 
-        self.map = np.zeros((FSMAction.MAX__, FSMState.MAX__), int)
+        self.map: np.ndarray = np.zeros((FSMAction.MAX__, FSMState.MAX__), int)
 
         self.map[FSMAction.NO_ACT][FSMState.STOPPED] = FSMState.STOPPED
         self.map[FSMAction.STOP][FSMState.STOPPED] = FSMState.STOPPED
@@ -78,6 +87,7 @@ class FSM:
         self.cur = state
 
     def reset(self):
+        self.info.clear
         self.cur = FSMState.STOPPED
 
     def execute(self):
@@ -105,11 +115,15 @@ class FSM:
             start = p.cur.clone()
             start.t = 0
             end_time = TOP_TM_C * (p.target.t - start.t)
+            step_dist = np.linalg.norm(
+                np.array([p.target.x - start.x, p.target.y - start.y]))
+            self.info.walk_h = get_walk_height(
+                step_dist, self.leg.body.sens_info.abs_std_leg_h)
 
             end = DestPoint(
                 [(start.x + END_OF_C * (p.target.x - start.x)),
                  (start.y + END_OF_C * (p.target.y - start.y)),
-                 WALK_H],
+                 self.info.walk_h],
                 end_time, None, None, 0.0)
 
             # self.leg.plan.log.points.append(end)
@@ -118,7 +132,7 @@ class FSM:
             p.points.append(DestPoint(
                 [start.x + MID_OF_C * (p.target.x - start.x),
                  start.y + MID_OF_C * (p.target.y - start.y),
-                 start.z + MID_PT_HT_C * (WALK_H - start.z)],
+                 start.z + MID_PT_HT_C * (self.info.walk_h - start.z)],
                 end_time / 2))
             p.points.append(end)
 
@@ -134,7 +148,10 @@ class FSM:
 
             p.step()
         else:
+            walk_h = self.info.walk_h
             p.reset()
+            self.info.walk_h = walk_h
+
             # self.plot()
             # self.next(FSMAction.STOP)
             self.next(FSMAction.END)
@@ -158,7 +175,7 @@ class FSM:
             p.points.append(DestPoint(
                 [start.x + PRE_LAND_PT_OF_C * (p.target.x - start.x),
                  start.y + PRE_LAND_PT_OF_C * (p.target.y - start.y),
-                 end.z + PRE_LAND_PT_HT_C * (WALK_H - end.z)],
+                 end.z + PRE_LAND_PT_HT_C * (self.info.walk_h - end.z)],
                 start.t + PRE_LAND_PT_TM_C * (p.target.t - start.t)))
             p.points.append(end)
 

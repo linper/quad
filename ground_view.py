@@ -118,7 +118,7 @@ class GrView:
         self.space.pack()
         self.draw_circle(reduced, q.sens_info.t_force_info.color)
         self.space.create_text(reduced[1] - 16, reduced[0] - 26,
-                               anchor=W, text=f"{round(q.sens_info.avg_leg_h, 3)}")
+                anchor=W, text=f"{round(q.sens_info.avg_leg_h, 3)}:{round(q.sens_info.abs_std_leg_h, 3)}")
 
     def draw_leg_adjust(self, leg, q: Quad):
         cpt = np.array([self.height / 2, self.width / 2, 0])
@@ -147,8 +147,8 @@ class GrView:
             ix, iy, reduced[1], reduced[0], width=4, fill="red")
         self.space.create_line(
             lpt[1], lpt[0], cpt[1], cpt[0], width=4, fill="black")
-        self.space.create_line(0, rb, self.width, rk *
-                               self.width+rb, width=4, fill="orange")
+        # self.space.create_line(0, rb, self.width, rk *
+                               # self.width+rb, width=4, fill="orange")
         self.space.create_line(
             ix, iy, cpt[1], cpt[0], width=4, fill=color)
         self.space.pack()

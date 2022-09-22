@@ -37,8 +37,8 @@ class Leg:
         self.sh_h = 0.03
         self.link_len = 0.1
         self.damp_len = 0.012
-        # self.stiffness_c = 0.00005
-        self.stiffness_c = 2.5
+        self.stiffness_c = 0.00005
+        # self.stiffness_c = 2.5
         self.do_balance: bool = True
 
     def get_angles(self) -> list:

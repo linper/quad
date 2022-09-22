@@ -6,7 +6,9 @@ from enum import Enum
 MAX_HEIGHT = 1.0
 MAX_DIP = -0.35
 MIN_DIP = -0.1
-WALK_H = -0.15
+WALK_H = -0.13
+MAX_WALK_H = -0.13
+MIN_WALK_H = -0.20
 MAX_FREQ = 50
 MIN_PERIOD = 0.02
 MAX_DROP_SPEED = -0.2

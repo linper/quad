@@ -36,6 +36,7 @@ class SensInfo:
     def __init__(self, q):
         self.host: Quad = q
         self.avg_leg_h: float = LEG_TAR_H
+        self.abs_std_leg_h: float = 0.0
         self.touch_force = np.zeros(4, dtype=int)
         self.damp = np.zeros(4, dtype=float)
         self.base_force_vector = np.zeros(3, dtype=float)
@@ -188,6 +189,10 @@ class SensInfo:
         ahl = [l.position[2] for l in self.host.legs if l.do_balance]
         self.avg_leg_h = np.average(np.array(ahl)) if len(ahl) else MAX_DIP
 
+        # absolute std of balanced leg heights
+        self.abs_std_leg_h = np.average(np.array(
+            [abs(l.position[2] - self.avg_leg_h) for l in self.host.legs if l.do_balance])) if len(ahl) else 0.0
+
 
 class Quad:
     def __init__(self, model, fll, frl, bll, brl, sensor):
@@ -212,7 +217,9 @@ class Quad:
             self.legs_cw[i].next = self.legs_cw[i+1]
 
     def set_target(self, tasks):
-        pace = 1.0
+        # pace = 5.0
+        # pace = 1.6
+        pace = 0.7
         for t in tasks:
             l = self.legs[t.idx]
 
