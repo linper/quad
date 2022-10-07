@@ -29,7 +29,8 @@ def fill_diffs(lst):
 
 
 def fill_diffs2(lst):
-    time_steps = np.array([float(i.ts) for i in lst])
+    time_steps = np.array([float(ts_to_t(i.ts)) for i in lst])
+    # time_steps = np.array([float(i.ts) for i in lst])
     data_x = np.array([float(i.pos[0]) for i in lst])
     data_y = np.array([float(i.pos[1]) for i in lst])
     data_z = np.array([float(i.pos[2]) for i in lst])

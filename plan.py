@@ -126,7 +126,7 @@ class Plan:
         # spline_z = connect_splines2(time, data_z, data_dz, time)
         # time_steps = connect_times(time)
 
-        if self.leg.fsm.cur in [1, 2]:
+        if False and self.leg.fsm.cur in [1, 2]:
             plt.figure()
             plt.plot(spline_x, spline_z, color="blue")
             # plt.plot(list(range(len(spline_x))), spline_x, color="blue")

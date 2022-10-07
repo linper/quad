@@ -240,9 +240,9 @@ class Quad:
                 act = FSMState.PENDING
             elif t.do_lift:
                 act = FSMState.ASCENDING
-                est_n_steps = 500
+                # est_n_steps = 500
                 # est_n_steps = 10
-                # est_n_steps = 100
+                est_n_steps = 100
                 dst = DestPoint(l_target, f_arr_unset(),
                                 init_pace, ts=est_n_steps)
                 speed_func = variable_speed_func
