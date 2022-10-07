@@ -7,6 +7,7 @@ MAX_HEIGHT = 1.0
 MAX_DIP = -0.35
 MIN_DIP = -0.1
 WALK_H = -0.13
+# MAX_WALK_H = -0.17
 MAX_WALK_H = -0.13
 MIN_WALK_H = -0.20
 MAX_FREQ = 50
@@ -18,6 +19,7 @@ ADJUST_SENS = abs(T_RAD) * 0.05
 STEP = 0.01
 LEG_TAR_H = -0.26
 SOFT_HIT_THR = 0.02
+F_UNSET = float("NaN")
 
 
 # some aggregations
@@ -90,3 +92,7 @@ process_position = 0.0
 process_state = 0
 touch_force = [0, 0, 0, 0]
 touch_force_max = [0, 0, 0, 0]
+
+
+def f_arr_unset():
+    return np.array([F_UNSET, F_UNSET, F_UNSET])

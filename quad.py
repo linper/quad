@@ -5,9 +5,10 @@ import numpy as np
 import math
 import functools
 from enum import IntEnum
-from interp import *
+from interp import gradual_speed_func, variable_speed_func, do_nothing, get_cross_product
+from plan import DestPoint
 # from ground_view import SPoint
-from fsm import *
+from fsm import FSMState, FSMAction, FSM
 
 
 class TouchState(IntEnum):
@@ -217,30 +218,48 @@ class Quad:
             self.legs_cw[i].next = self.legs_cw[i+1]
 
     def set_target(self, tasks):
-        # pace = 5.0
-        # pace = 1.6
-        pace = 0.7
+        # init_pace = 5.0
+        # init_pace = 1.6
+        init_pace = 0.7
+        speed_ps = 0.001
+
         for t in tasks:
             l = self.legs[t.idx]
 
             if len(t.points) == 0:
                 l.make_plan(
-                    DestPoint(np.zeros(3, dtype=float), pace), FSMState.PENDING)
+                    DestPoint(l.plan.target.pos, f_arr_unset(), init_pace), FSMState.PENDING)
                 continue
 
-            act = FSMState.ASCENDING if t.do_lift else FSMState.TRAVERSING
-
             l_target = t.points[0].pos  # TODO add multiple targets
+            S = np.linalg.norm(l_target - l.plan.target.pos)
+            est_n_steps = 0
+
+            if S == 0.0:
+                speed_func = do_nothing
+                act = FSMState.PENDING
+            elif t.do_lift:
+                act = FSMState.ASCENDING
+                est_n_steps = 500
+                # est_n_steps = 10
+                # est_n_steps = 100
+                dst = DestPoint(l_target, f_arr_unset(),
+                                init_pace, ts=est_n_steps)
+                speed_func = variable_speed_func
+            else:
+                act = FSMState.TRAVERSING
+                # adds error
+                n_step = round(2 * S / (l.plan.target.vel_ps + speed_ps))
+                dst = DestPoint(l_target, f_arr_unset(), ts=n_step)
+                est_n_steps = n_step
+                dst.vel_ps = speed_ps
+                speed_func = gradual_speed_func
+
+                # pace = l.est_pace(dst)
+                # st_pt = l.plan.target
+                # st = np.array([st_pt.x, st_pt.y, st_pt.z], dtype=float)
+                # init_nt = int(math.ceil(init_pace / STEP))
+
             # l_target[2] = l.def_pos[2]
             # l_target = l.def_pos + t.points[0].pos  # TODO add multiple targets
-            l.make_plan(DestPoint(l_target, pace), act)
-
-    # def set_target(self, lst):
-        # if len(lst) == 0:
-            # target = np.zeros(3, dtype=float)
-        # else:
-            # target = lst[0]  # for now
-
-        # for l in self.legs:
-            # l_target = l.def_pos + target
-            # l.make_plan(DestPoint(l_target, 1.0), FSMState.TRAVERSING)
+            l.make_plan(dst, act, speed_func, est_n_steps)

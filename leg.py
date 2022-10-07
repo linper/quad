@@ -100,6 +100,15 @@ class Leg:
         dst = 1.0 * (damp_val - T_RAD)
         return bool(l_tf > 0), soft_hit, dst
 
+    # def est_pace(self, dst: DestPoint): -> float
+        # act = FSMState.TRAVERSING
+        # st_pt = self.plan.target
+        # st = np.array([st_pt.x, st_pt.y, st_pt.z], dtype=float)
+        # init_nt = int(math.ceil(init_pace / STEP))
+        # S = dst.pos - self.plan.target.pos
+        # v = S / init_nt
+        # pace = round(2 * S / ())
+
     def update(self, q):
         angles = self.get_angles()
         damp_state = p.getJointState(q.model, self.dampener)
@@ -125,9 +134,11 @@ class Leg:
                                 # force=self.stiffness_c * (1-(damp_state[0] / self.damp_len)))
                                 force=self.stiffness_c * (damp_state[0] / self.damp_len))
 
-    def make_plan(self, dest: DestPoint, state: FSMState):
+    def make_plan(self, dest: DestPoint, state: FSMState, speed_func=do_nothing, est_n_steps: int = -1):
         self.fsm.reset()
         self.plan.reset()
+        self.plan.speed_func = speed_func
+        self.plan.est_n_steps = est_n_steps
 
         self.plan.target = dest
 
