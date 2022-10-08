@@ -8,29 +8,7 @@ def drop_time(h):
 
 
 def fill_diffs(lst):
-    time = np.array([float(i.t) for i in lst])
-    data_x = np.array([float(i.pos[0]) for i in lst])
-    data_y = np.array([float(i.pos[1]) for i in lst])
-    data_z = np.array([float(i.pos[2]) for i in lst])
-
-    dx = akima(time, data_x)
-    dy = akima(time, data_y)
-    dz = akima(time, data_z)
-
-    for i in range(len(lst)):
-        if np.isnan(lst[i].vel[0]):
-            lst[i].vel[0] = dx[i]
-
-        if np.isnan(lst[i].vel[1]):
-            lst[i].vel[1] = dy[i]
-
-        if np.isnan(lst[i].vel[2]):
-            lst[i].vel[2] = dz[i]
-
-
-def fill_diffs2(lst):
     time_steps = np.array([float(ts_to_t(i.ts)) for i in lst])
-    # time_steps = np.array([float(i.ts) for i in lst])
     data_x = np.array([float(i.pos[0]) for i in lst])
     data_y = np.array([float(i.pos[1]) for i in lst])
     data_z = np.array([float(i.pos[2]) for i in lst])
@@ -65,8 +43,10 @@ def gradual_speed_func(d1, d2):
     vels_ps = np.linspace(d1.vel_ps, d2.vel_ps, d2.ts - d1.ts + 1)
     dists = np.zeros(d2.ts - d1.ts + 1, dtype=float)
     tm_sum = 0.0
+    prev_v = 0.0
     for i, v in enumerate(vels_ps):
-        tm_sum += v
+        tm_sum += (v + prev_v) / 2
+        prev_v = v
         dists[i] = tm_sum
 
     return dists, vels_ps
@@ -88,8 +68,10 @@ def variable_speed_func(d1, d2):
     vels_ps = vels_ps + vels_base
     ad_dists = np.zeros(tm_interval + 1, dtype=float)
     tm_sum = 0.0
+    prev_v = 0.0
     for i, v in enumerate(vels_ps):
-        tm_sum += v
+        tm_sum += (v + prev_v) / 2
+        prev_v = v
         ad_dists[i] = tm_sum
 
     mod_dists = dists + ad_dists
@@ -238,51 +220,13 @@ def hermite2(Y, dY, t):
     return interp_values
 
 
-def connect_splines(X, Y, dY, n):
-    visible_y = []
-    for i in range(len(X) - 1):
-        X_pair = X[i:i + 2]
-        Y_pair = Y[i:i + 2]
-        dY_pair = dY[i:i + 2]
-        spline_interval = hermite(X_pair, Y_pair, dY_pair, n)
-        if len(visible_y) == 0:
-            visible_y.extend(spline_interval)
-        else:
-            visible_y.extend(spline_interval[1:])
-    return visible_y
-
-
-def connect_splines2(X, Y, dY, t):
-    visible_y = []
-    for i in range(len(X) - 1):
-        X_pair = X[i:i + 2]
-        Y_pair = Y[i:i + 2]
-        dY_pair = dY[i:i + 2]
-        n = int(math.ceil((t[i + 1] - t[i]) / STEP))
-        spline_interval = hermite(X_pair, Y_pair, dY_pair, n + 1)
-        if len(visible_y) == 0:
-            visible_y.extend(spline_interval)
-        else:
-            visible_y.extend(spline_interval[1:])
-    return visible_y
-
-
-def connect_splines3(Y, dY, t):
+def connect_splines(Y, dY, t):
     visible_y = []
     for i in range(len(Y) - 1):
-        # X_pair = X[i:i + 2]
         Y_pair = Y[i:i + 2]
         dY_pair = dY[i:i + 2]
-        # n = int(math.ceil((t[i][-1] - t[i][0]) / STEP))
-        # t_lin = np.linspace(t[i][0], t[i][-1], n)
-        # t_lin = np.linspace(0, len(t[i]) - 1, len(t[i]))
-        # spline_interval = hermite2(Y_pair, dY_pair, t_lin)
         spline_interval = hermite2(Y_pair, dY_pair, t[i])
         visible_y.extend(spline_interval[1:])
-        # if len(visible_y) == 0:
-        # visible_y.extend(spline_interval)
-        # else:
-        # visible_y.extend(spline_interval[1:])
     return visible_y
 
 
@@ -304,19 +248,7 @@ def interp_linear(x0, x1, pts: list):
     return ret
 
 
-def connect_times(t):
-    visible_y = []
-    for i in range(len(t) - 1):
-        n = int(math.ceil((t[i + 1] - t[i]) / STEP))
-        time_steps = np.linspace(t[i], t[i + 1], n + 1, dtype=np.float32)
-        if len(visible_y) == 0:
-            visible_y.extend(time_steps)
-        else:
-            visible_y.extend(time_steps[1:])
-    return visible_y
-
-
-def connect_times2(dstl, func):
+def connect_times(dstl, func):
     continious = []
     vel_ps = []
     chunked = []
@@ -329,8 +261,8 @@ def connect_times2(dstl, func):
         time_steps = map_ranges(dist_steps, dist_steps[0], dist_steps[-1], ts_to_t(
             dstl[i].ts), ts_to_t(dstl[i + 1].ts))
 
-        time_steps = np.linspace(ts_to_t(dstl[i].ts), ts_to_t(
-            dstl[i + 1].ts), dstl[i + 1].ts - dstl[i].ts)
+        # time_steps = np.linspace(ts_to_t(dstl[i].ts), ts_to_t(
+        # dstl[i + 1].ts), dstl[i + 1].ts - dstl[i].ts)
 
         chunked.append(time_steps)
         continious.extend(time_steps[1:])
@@ -339,7 +271,6 @@ def connect_times2(dstl, func):
         # continious.extend(time_steps)
         # else:
         # continious.extend(time_steps[1:])
-        # TODO: This retruns distances, not <06-10-22, yourname> #
     return np.array(continious), chunked, np.array(vel_ps)
 
 # def get_legs_normal(arr):

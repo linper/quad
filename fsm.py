@@ -117,11 +117,7 @@ class FSM:
         if p.need_plan:
             print(f"{self.leg.name} : Ascending")
             self.leg.do_balance = False
-            # start = p.cur.clone()
-            # start.t = 0
-            # start.ts = 0
             start = DestPoint(np.copy(p.cur.pos), f_arr_unset(), ts=0)
-            end_time = TOP_TM_C * (p.target.t - start.t)
             end_ts = int(floor(TOP_TM_C * (p.target.ts - start.ts)))
             step_dist = np.linalg.norm(
                 np.array([p.target.x - start.x, p.target.y - start.y]))
@@ -132,13 +128,13 @@ class FSM:
                 np.array([(start.x + END_OF_C * (p.target.x - start.x)),
                           (start.y + END_OF_C * (p.target.y - start.y)),
                           self.info.walk_h]),
-                np.array([F_UNSET, F_UNSET, 0.0]), end_time, ts=end_ts)
+                np.array([F_UNSET, F_UNSET, 0.0]), ts=end_ts)
 
             mid = DestPoint(
                 np.array([start.x + MID_OF_C * (p.target.x - start.x),
                           start.y + MID_OF_C * (p.target.y - start.y),
                           start.z + MID_PT_HT_C * (self.info.walk_h - start.z)]), f_arr_unset(),
-                end_time / 2, ts=int(end_ts // 2))
+                ts=int(end_ts // 2))
 
             start.vel_ps = 0.0
             mid.vel_ps = get_d2_speed(start, mid)
@@ -149,9 +145,9 @@ class FSM:
             p.points.append(mid)
             p.points.append(end)
 
-            fill_diffs2(p.points)
+            fill_diffs(p.points)
 
-            p.plan_steps2()
+            p.plan_steps()
 
             p.need_plan = False
 
@@ -180,11 +176,10 @@ class FSM:
             self.leg.do_balance = False
             start = p.cur.clone()
             end = DestPoint(
-                np.copy(p.target.pos), np.array([0, F_UNSET, F_UNSET]), p.target.t, ts=p.target.ts)
+                np.copy(p.target.pos), np.array([0, F_UNSET, F_UNSET]), ts=p.target.ts)
 
             # self.leg.plan.log.points.append(end)
 
-            mid_t = start.t + PRE_LAND_PT_TM_C * (p.target.t - start.t)
             mid_ts = round(start.ts + PRE_LAND_PT_TM_C *
                            (p.target.ts - start.ts))
             mid = DestPoint(
@@ -192,7 +187,6 @@ class FSM:
                           start.y + PRE_LAND_PT_OF_C * (p.target.y - start.y),
                           end.z + PRE_LAND_PT_HT_C * (self.info.walk_h - end.z)]),
                 f_arr_unset(),
-                t=mid_t,
                 ts=mid_ts)
 
             mid.vel_ps = get_d2_speed(start, mid)
@@ -203,9 +197,9 @@ class FSM:
 
             self.leg.plan.speed_func = variable_speed_func
 
-            fill_diffs2(p.points)
+            fill_diffs(p.points)
 
-            p.plan_steps2()
+            p.plan_steps()
 
             p.need_plan = False
 
@@ -232,14 +226,16 @@ class FSM:
         if p.need_plan:
             print(f"{self.leg.name} : Traversing")
             self.leg.do_balance = True
-            start = p.cur.clone()
-            start.t = 0.0
-            start.ts = 0
-            start.dx = 0.0
-            start.dy = 0.0
-            start.dz = 0.0
+            start = DestPoint(np.copy(p.cur.pos),
+                              np.array([0.0, 0.0, 0.0]), ts=0, vel_ps=p.cur.vel_ps)
+
+            # start = p.cur.clone()
+            # start.ts = 0
+            # start.dx = 0.0
+            # start.dy = 0.0
+            # start.dz = 0.0
             end = DestPoint(np.copy(p.target.pos),
-                            np.array([0.0, 0.0, 0.0]), p.target.t, ts=p.target.ts)
+                            np.array([0.0, 0.0, 0.0]), ts=p.target.ts)
             end.vel_ps = p.target.vel_ps
 
             # self.leg.plan.log.points.append(end)
@@ -247,9 +243,9 @@ class FSM:
             p.points.append(start)
             p.points.append(end)
 
-            fill_diffs2(p.points)
+            fill_diffs(p.points)
 
-            p.plan_steps2()
+            p.plan_steps()
 
             p.need_plan = False
 

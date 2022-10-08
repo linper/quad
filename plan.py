@@ -26,6 +26,18 @@ class DestPoint:
     def clone(self):
         return DestPoint(np.copy(self.pos), np.copy(self.vel), self.t, self.ts, self.vel_ps)
 
+    def set_pos(self, pos: np.ndarray):
+        self.pos = pos
+        self.x = pos[0]
+        self.y = pos[1]
+        self.z = pos[2]
+
+    def set_vel(self, vel: np.ndarray):
+        self.vel = vel
+        self.dx = vel[0]
+        self.dy = vel[1]
+        self.dz = vel[2]
+
 
 class Logger:
     def __init__(self):
@@ -78,29 +90,6 @@ class Plan:
         self.adj = np.zeros(3, dtype=float)
 
     def plan_steps(self):
-        time = np.array([i.t for i in self.points])
-        data_x = np.array([i.pos[0] for i in self.points])
-        data_y = np.array([i.pos[1] for i in self.points])
-        data_z = np.array([i.pos[2] for i in self.points])
-        data_dx = np.array([i.vel[0] for i in self.points])
-        data_dy = np.array([i.vel[1] for i in self.points])
-        data_dz = np.array([i.vel[2] for i in self.points])
-
-        # self.log.points.extend(self.points)
-
-        spline_x = connect_splines2(time, data_x, data_dx, time)
-        spline_y = connect_splines2(time, data_y, data_dy, time)
-        spline_z = connect_splines2(time, data_z, data_dz, time)
-        time_steps = connect_times(time)
-        dx = akima(np.array(time_steps), np.array(spline_x))
-        dy = akima(np.array(time_steps), np.array(spline_y))
-        dz = akima(np.array(time_steps), np.array(spline_z))
-
-        steps = [DestPoint(np.array([x, y, z]), np.array([dx_, dy_, dz_]), t) for x, y, z, t, dx_, dy_, dz_ in zip(
-            spline_x, spline_y, spline_z, time_steps, dx, dy, dz)]
-        self.steps = steps
-
-    def plan_steps2(self):
         time_points = np.array([i.ts for i in self.points])
         data_x = np.array([i.pos[0] for i in self.points])
         data_y = np.array([i.pos[1] for i in self.points])
@@ -113,34 +102,27 @@ class Plan:
 
         ts_connected = np.array(
             list(range(time_points[0] + 1, time_points[-1] + 1)))
-        time_steps, time_steps_chunked, vels_ps = connect_times2(
+        time_steps, time_steps_chunked, vels_ps = connect_times(
             self.points, self.speed_func)
 
-        spline_x = connect_splines3(data_x, data_dx, time_steps_chunked)
-        spline_y = connect_splines3(data_y, data_dy, time_steps_chunked)
-        spline_z = connect_splines3(data_z, data_dz, time_steps_chunked)
-
-        # time = np.array([ts_to_t(ts) for ts in time_points])
-        # spline_x = connect_splines2(time, data_x, data_dx, time)
-        # spline_y = connect_splines2(time, data_y, data_dy, time)
-        # spline_z = connect_splines2(time, data_z, data_dz, time)
-        # time_steps = connect_times(time)
+        spline_x = connect_splines(data_x, data_dx, time_steps_chunked)
+        spline_y = connect_splines(data_y, data_dy, time_steps_chunked)
+        spline_z = connect_splines(data_z, data_dz, time_steps_chunked)
 
         if False and self.leg.fsm.cur in [1, 2]:
             plt.figure()
-            plt.plot(spline_x, spline_z, color="blue")
-            # plt.plot(list(range(len(spline_x))), spline_x, color="blue")
-            # plt.plot(list(range(len(spline_y))), spline_y, color="red")
-            # plt.plot(list(range(len(spline_z))), spline_z, color="green")
+            # plt.plot(spline_x, spline_z, color="blue")
+            plt.plot(list(range(len(spline_x))), spline_x, color="blue")
+            plt.plot(list(range(len(spline_y))), spline_y, color="red")
+            plt.plot(list(range(len(spline_z))), spline_z, color="green")
             # plt.plot(list(range(len(time_steps))), time_steps, color="red")
-            plt.grid("both")
+            # plt.grid("both")
             plt.show()
 
         dx = akima(np.array(time_steps), np.array(spline_x))
         dy = akima(np.array(time_steps), np.array(spline_y))
         dz = akima(np.array(time_steps), np.array(spline_z))
 
-        # TODO: all lengths does not match  <04-10-22, yourname> #
         steps = [DestPoint(np.array([x, y, z]), np.array([dx_, dy_, dz_]), t, ts=ts, vel_ps=v_ps) for x, y, z, t, ts, dx_, dy_, dz_, v_ps in zip(
             spline_x, spline_y, spline_z, time_steps, ts_connected, dx, dy, dz, vels_ps)]
         self.steps = steps

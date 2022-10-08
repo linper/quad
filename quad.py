@@ -166,6 +166,7 @@ class SensInfo:
             if np.isnan(f):
                 f = 0.0
                 print(f"force was nan")
+                # TODO: I somehow receive this, when clearing leg position <07-10-22, yourname> #
             self.touch_force[l.idx] = -f
 
         # base force vector
@@ -225,26 +226,26 @@ class Quad:
 
         for t in tasks:
             l = self.legs[t.idx]
-
-            if len(t.points) == 0:
-                l.make_plan(
-                    DestPoint(l.plan.target.pos, f_arr_unset(), init_pace), FSMState.PENDING)
-                continue
-
-            l_target = t.points[0].pos  # TODO add multiple targets
-            S = np.linalg.norm(l_target - l.plan.target.pos)
+            S = 0.0
             est_n_steps = 0
 
-            if S == 0.0:
+            l_target = np.copy(l.plan.target.pos)
+
+            if len(t.points) != 0:
+                l_target = t.points[0].pos  # TODO add multiple targets
+                S = np.linalg.norm(l_target - l.plan.target.pos)
+
+            if len(t.points) == 0 or S == 0.0:
                 speed_func = do_nothing
                 act = FSMState.PENDING
+                dst = DestPoint(l_target, f_arr_unset(), ts=0, vel_ps=0.0)
             elif t.do_lift:
                 act = FSMState.ASCENDING
                 # est_n_steps = 500
                 # est_n_steps = 10
                 est_n_steps = 100
                 dst = DestPoint(l_target, f_arr_unset(),
-                                init_pace, ts=est_n_steps)
+                                ts=est_n_steps)
                 speed_func = variable_speed_func
             else:
                 act = FSMState.TRAVERSING
@@ -254,11 +255,6 @@ class Quad:
                 est_n_steps = n_step
                 dst.vel_ps = speed_ps
                 speed_func = gradual_speed_func
-
-                # pace = l.est_pace(dst)
-                # st_pt = l.plan.target
-                # st = np.array([st_pt.x, st_pt.y, st_pt.z], dtype=float)
-                # init_nt = int(math.ceil(init_pace / STEP))
 
             # l_target[2] = l.def_pos[2]
             # l_target = l.def_pos + t.points[0].pos  # TODO add multiple targets
