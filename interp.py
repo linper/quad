@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from consts import *
+from numba import njit
 
 
 def drop_time(h):
@@ -18,14 +19,20 @@ def fill_diffs(lst):
     dz = akima(time_steps, data_z)
 
     for i in range(len(lst)):
+        vel = np.copy(lst[i].vel)
         if np.isnan(lst[i].vel[0]):
-            lst[i].vel[0] = dx[i]
+            vel[0] = dx[i]
+            # lst[i].vel[0] = dx[i]
 
         if np.isnan(lst[i].vel[1]):
-            lst[i].vel[1] = dy[i]
+            vel[1] = dy[i]
+            # lst[i].vel[1] = dy[i]
 
         if np.isnan(lst[i].vel[2]):
-            lst[i].vel[2] = dz[i]
+            vel[2] = dz[i]
+            # lst[i].vel[2] = dz[i]
+
+        lst[i].set_vel(vel)
 
 
 def get_d2_speed(d1, d2):
@@ -120,7 +127,12 @@ def ts_to_t(ts):
     return STEP * ts
 
 
-def map_ranges(rng, st0, fi0, st1, fi1):
+def map_ranges(rng, st0, fi0, st1, fi1, default=0.0):
+    if fi0 - st0 == 0.0:
+        def_rng = np.zeros(len(rng), dtype=float)
+        def_rng.fill(default)
+        return def_rng
+
     mul = (fi1 - st1) / (fi0 - st0)
     rng_arr = np.array(rng)
     rng_arr = rng_arr - st0
@@ -287,30 +299,54 @@ def connect_times(dstl, func):
 #         return np.array([0, 0, -1])
 
 
+@njit
 def get_vectors_cosine(a, b):
     la = np.linalg.norm(a)
     lb = np.linalg.norm(b)
     if la == 0 or lb == 0:
-        return 0
+        return 0.0
     else:
-        return np.dot(a, b) / (la * lb)
+        return get_dot_product(a, b) / (la * lb)
 
 
+@njit
 def get_vectors_angle(a, b):
     return math.acos(get_vectors_cosine(a, b))
 
 
+@njit
 def get_cross_product(a, b):
     # return np.cross(a, b)
     return np.array([a[1] * b[2] - a[2] * b[1],  a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
 
 
+@njit
+def get_dot_product(a, b):
+    return np.sum(a * b, axis=0)
+
+
+@njit
+def get_mv_dot_product(a, b):
+    return np.sum(a * b, axis=1)
+
+
+@njit
+def identity(n):
+    arr = np.zeros((n, n), dtype=float)
+    for i in range(n):
+        arr[i, i] = 1.0
+
+    return arr
+
+
+@njit
 def get_rotation_matrix_from_two_vectors(a, b):
     a = strech_vector_to(a, 1)
     b = strech_vector_to(b, 1)
     phi = math.acos(get_vectors_cosine(a, b))
     axis = strech_vector_to(get_cross_product(a, b), 1)
-    matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+    # matrix = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+    matrix = identity(3)
     rcos = math.cos(phi)
     rsin = math.sin(phi)
     matrix[0][0] = rcos + axis[0] * axis[0] * (1 - rcos)
@@ -326,19 +362,21 @@ def get_rotation_matrix_from_two_vectors(a, b):
     return matrix
 
 
+@njit
 def get_4x4_from_3x3_mat(arr: np.ndarray):
-    n_arr = np.identity(4, dtype=float)
+    n_arr = identity(4)
     n_arr[:3, :3] = arr
     return n_arr
 
 
-def strech_vector_to(v, lenght):
+@njit
+def strech_vector_to(v: np.ndarray, lenght):
     lv = np.linalg.norm(v)
     if lv != 0:
         return v * (lenght / lv)
     else:
-        return np.array([0, 0, 0])
+        return np.array([0.0, 0.0, 0.0])
 
 
 def vector_projection(from_vec, to_vec):
-    return (np.dot(from_vec, to_vec)) / np.linalg.norm(to_vec)
+    return (get_dot_product(from_vec, to_vec)) / np.linalg.norm(to_vec)

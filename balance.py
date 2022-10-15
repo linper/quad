@@ -7,6 +7,7 @@ import numpy as np
 
 from plan import *
 from consts import MAX_WALK_H, MIN_WALK_H
+from numba import njit
 
 
 class BalanceAttrs(IntEnum):
@@ -50,7 +51,7 @@ def get_lean_diff(leg):
 
     force_r_mat = get_rotation_matrix_from_two_vectors(
         np.array([0.0, 0.0, -1.0]), leg.body.sens_info.base_force_vector)
-    leg_pos_mod = np.dot(leg.position, force_r_mat)
+    leg_pos_mod = get_dot_product(leg.position, force_r_mat)
     leg_dif = leg_pos_mod - leg.position
 
     return leg_dif[2]
@@ -73,8 +74,10 @@ def get_balance_base(q, cof):
 
         leg_pos_mod = np.ones(4, dtype=float)
         leg_pos_mod[:3] = l.position
-        leg_pos_mod = bfo_mat.dot(leg_pos_mod)
-        leg_pos_mod = height_mat.dot(leg_pos_mod)
+        leg_pos_mod = get_mv_dot_product(bfo_mat, leg_pos_mod)
+        leg_pos_mod = get_mv_dot_product(height_mat, leg_pos_mod)
+        # leg_pos_mod = bfo_mat.dot(leg_pos_mod)
+        # leg_pos_mod = height_mat.dot(leg_pos_mod)
 
         leg_dif = leg_pos_mod[:3] - l.position
 

@@ -7,6 +7,19 @@ from plan import DestPoint
 from pidc import PIDC
 
 
+class LegView:
+    def __init__(self, l):
+        self.idx: int = l.idx
+        self.name: str = l.name
+        self.position = l.position
+        self.def_pos = l.def_pos
+        self.base_off = l.base_off
+        self.plan = l.plan.get_view()
+        self.fsm: FSM = l.fsm.get_view()
+        self.grounded = l.grounded
+        self.do_balance: bool = l.do_balance
+
+
 class Leg:
     def __init__(self, name, base, shoulder, knee, heel, damp, sensor, dir, pos, off):
         ps = np.array(pos)
@@ -40,6 +53,9 @@ class Leg:
         self.stiffness_c = 0.00005
         # self.stiffness_c = 2.5
         self.do_balance: bool = True
+
+    def get_view(self):
+        return LegView(self)
 
     def get_angles(self) -> list:
         target = np.copy(self.position) - self.base_off
@@ -125,13 +141,14 @@ class Leg:
                                 # force=self.stiffness_c * (1-(damp_state[0] / self.damp_len)))
                                 force=self.stiffness_c * (damp_state[0] / self.damp_len))
 
-    def make_plan(self, dest: DestPoint, state: FSMState, speed_func=do_nothing, est_n_steps: int = -1):
+    # def make_plan(self, pts: list, state: FSMState, speed_func=do_nothing, est_n_steps: int = -1):
+    def make_plan(self, pts: list, state: FSMState, speed_func=do_nothing):
         self.fsm.reset()
         self.plan.reset()
         self.plan.speed_func = speed_func
-        self.plan.est_n_steps = est_n_steps
-
-        self.plan.target = dest
+        # self.plan.est_n_steps = est_n_steps
+        self.plan.raw_points = pts
+        self.plan.target = pts[-1]
 
         self.fsm.set(state)
         # self.fsm.execute()

@@ -4,6 +4,7 @@ import numpy as np
 from leg import Leg
 from quad import Quad
 from consts import *
+from fsm import FSM
 from interp import *
 import functools
 from enum import IntEnum
@@ -96,7 +97,7 @@ class GrView:
                                pt[1] + r, pt[0] + r, fill=color)
         leg_name_abr = "".join([c[0] for c in leg.name.split("_")])
         self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
-                               anchor=W, text=f"{leg_name_abr}:{leg.fsm.state_str()}:{round(leg.plan.adj[2], 3)}:{round(leg.position[2], 3)}")
+                               anchor=W, text=f"{leg_name_abr}:{FSM.state_str(leg.fsm)}:{round(leg.plan.adj[2], 3)}:{round(leg.position[2], 3)}")
 
     def draw_circle(self, pos, color):
         r = 6

@@ -6,6 +6,7 @@ from enum import IntEnum
 from math import floor
 from interp import variable_speed_func
 
+import cProfile
 
 min_damp = 0.0
 max_damp = 0.0
@@ -36,6 +37,17 @@ class FSMInfo():
 
     def clear(self):
         self.step_h = 0.0
+
+    def clone(self):
+        cl = FSMInfo()
+        cl.step_h = self.step_h
+        return cl
+
+
+class FSMView:
+    def __init__(self, fsm):
+        self.cur: FSMState = fsm.cur
+        self.info: FSMInfo = fsm.info.clone()
 
 
 class FSM:
@@ -72,14 +84,18 @@ class FSM:
         self.map[FSMAction.NO_ACT][FSMState.PENDING] = FSMState.PENDING
         self.map[FSMAction.STOP][FSMState.PENDING] = FSMState.STOPPED
 
-    def state_str(self):
+    def get_view(self):
+        return FSMView(self)
+
+    @classmethod
+    def state_str(cls, fsm):
         str_dict = {
             FSMState.STOPPED: "STP",
             FSMState.ASCENDING: "ASC",
             FSMState.DESCENDING: "DES",
             FSMState.TRAVERSING: "TRV",
             FSMState.PENDING: "PND"}
-        return str_dict[self.cur]
+        return str_dict[fsm.cur]
 
     def next(self, act: FSMAction):
         st = self.map[act][self.cur]
@@ -152,6 +168,7 @@ class FSM:
             p.need_plan = False
 
         if len(p.steps) > 0:
+        # if p.step_idx < p.steps.size:
             # global misc_data
             # misc_data.append(p.steps[0].z)
 
@@ -215,6 +232,7 @@ class FSM:
             p.reset()
             self.next(FSMAction.HIT)
         elif len(p.steps) > 0:
+        # elif p.step_idx < p.steps.size:
             p.step()
         else:
             p.reset()
@@ -234,14 +252,17 @@ class FSM:
             # start.dx = 0.0
             # start.dy = 0.0
             # start.dz = 0.0
-            end = DestPoint(np.copy(p.target.pos),
-                            np.array([0.0, 0.0, 0.0]), ts=p.target.ts)
-            end.vel_ps = p.target.vel_ps
+
+            p.raw_points[-1].set_vel(np.array([0.0, 0.0, 0.0]))
+
+            # end = DestPoint(np.copy(p.target.pos),
+                            # np.array([0.0, 0.0, 0.0]), ts=p.target.ts, vel_ps=p.target.vel_ps)
 
             # self.leg.plan.log.points.append(end)
 
             p.points.append(start)
-            p.points.append(end)
+            p.points.extend(p.raw_points)
+            # p.points.append(end)
 
             fill_diffs(p.points)
 
@@ -250,6 +271,7 @@ class FSM:
             p.need_plan = False
 
         if len(p.steps) == 0:
+        # if p.step_idx == p.steps.size:
             p.reset()
             self.next(FSMAction.END)
         else:

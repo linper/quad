@@ -4,6 +4,7 @@ import numpy as np
 import math
 from ground_view import tk_start, SPoint, GoTask
 import matplotlib.pyplot as plt
+import gc
 
 from consts import *
 from balance import *
@@ -12,7 +13,7 @@ from leg import Leg
 from quad import Quad
 import multiprocessing as mp
 
-log_dt_len = 3000
+log_dt_len = 1500
 log_dt_idx = 0
 log_data: np.ndarray = np.zeros((5, log_dt_len), dtype=np.float)
 
@@ -69,11 +70,20 @@ def get_commands():
     #     time.sleep(0.001)
 
     if q_to_gv.empty():
-        q_to_gv.put(q)
+        gv = q.get_view()
+        q_to_gv.put(gv)
 
     # q_to_gv.put(q)
 
 # start point
+
+
+def precompile():
+    get_vectors_angle(np.array([1.0, 2.0]), np.array([2.0, 1.1]))
+    get_mv_dot_product(identity(2), np.array([2.0, 1.1]))
+    get_rotation_matrix_from_two_vectors(
+        np.array([1.0, 2.0]), np.array([2.0, 1.1]))
+    get_4x4_from_3x3_mat(identity(3))
 
 
 p.connect(p.GUI)
@@ -189,6 +199,8 @@ q_to_gv = mp.Queue(1)
 q_from_gv = mp.Queue(10)
 q_cmd = mp.Queue(10)
 
+precompile()
+
 gv = mp.Process(target=tk_start, args=(q_to_gv, q_from_gv, q_cmd))
 gv.start()
 # q.to_starting_position()  # sets robot to starting position
@@ -197,6 +209,7 @@ counter = 0
 INTERV = 4.166666666666667
 l_time = int(1000 * time.time())
 p.setRealTimeSimulation(0)
+# gc.disable()
 
 while 1:
     c_time = int(1000 * time.time())

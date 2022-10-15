@@ -5,7 +5,7 @@ import numpy as np
 import math
 import functools
 from enum import IntEnum
-from interp import gradual_speed_func, variable_speed_func, do_nothing, get_cross_product
+from interp import gradual_speed_func, variable_speed_func, do_nothing, get_cross_product, map_ranges, get_mv_dot_product
 from plan import DestPoint
 # from ground_view import SPoint
 from fsm import FSMState, FSMAction, FSM
@@ -32,6 +32,31 @@ class TForceInfo:
         self.type: TouchState = state
         self.color: str = t_state_color_tbl[state]
 
+    def clone(self):
+        return TForceInfo(np.copy(self.pos), self.type)
+
+# class Quad_Snd:
+    # def __init__(q: Quad)
+
+
+class SensInfoView:
+    def __init__(self, si):
+        self.avg_leg_h: float = si.avg_leg_h
+        self.abs_std_leg_h: float = si.abs_std_leg_h
+        self.touch_force = si.touch_force.copy()
+        self.damp = si.damp.copy()
+        self.base_force_vector = si.base_force_vector.copy()
+        self.bf_hist = [arr.copy() for arr in si.bf_hist]
+        self.bf_max = si.bf_max
+        self.base_orientation_matrix = si.base_orientation_matrix.copy()
+        self.base_frame_orientation_matrix = si.base_frame_orientation_matrix.copy()
+        self.base_orientation = [arr.copy() for arr in si.base_orientation]
+        self.base_position = [arr.copy() for arr in si.base_position]
+        self.horizontal_turn_matrix = si.horizontal_turn_matrix.copy()
+        self.t_force_info: TForceInfo = si.t_force_info.clone()
+        self.s_center = si.s_center.copy()
+        self.to_s_closest = si.to_s_closest.copy()
+
 
 class SensInfo:
     def __init__(self, q):
@@ -43,22 +68,27 @@ class SensInfo:
         self.base_force_vector = np.zeros(3, dtype=float)
         self.bf_hist = [np.zeros(3, dtype=float)]
         self.bf_max = 35
-        self.base_orientation_matrix = None
-        self.base_frame_orientation_matrix = None
+        self.base_orientation_matrix = [np.zeros((3, 3), dtype=float)]
+        self.base_frame_orientation_matrix = [np.zeros((3, 3), dtype=float)]
         self.base_orientation = [np.zeros(4, dtype=float)]
         self.base_position = [np.zeros(3, dtype=float)]
-        self.horizontal_turn_matrix = None
+        self.horizontal_turn_matrix = [np.zeros((3, 3), dtype=float)]
         self.t_force_info: TForceInfo = TForceInfo(
             np.zeros(3, dtype=float), TouchState.PT0)
         self.s_center = np.zeros(3, dtype=float)
         self.to_s_closest = np.zeros(3, dtype=float)
 
+    def get_view(self):
+        return SensInfoView(self)
+
     # # some math, nothing to see here
+
     def get_base_frame_orientation_matrix(self):
         for i in range(4):
             if self.host.legs_cw[i] and self.host.legs_cw[i - 1] and self.host.legs_cw[i - 2]:
                 forward = np.array([-1, 0, 0])
-                X = base_orientation_matrix.dot(forward)
+                X = get_mv_dot_product(base_orientation_matrix, forward)
+                # X = base_orientation_matrix.dot(forward)
                 if X[0] <= 0:
                     temp = math.atan(X[1] / X[0])
                 else:
@@ -196,6 +226,29 @@ class SensInfo:
             [abs(l.position[2] - self.avg_leg_h) for l in self.host.legs if l.do_balance])) if len(ahl) else 0.0
 
 
+class QuadView:
+    def __init__(self, q):
+        self.sens_info = q.sens_info.get_view()
+        self.front_left_leg: Leg = q.front_left_leg.get_view()
+        self.front_right_leg: Leg = q.front_right_leg.get_view()
+        self.back_left_leg: Leg = q.back_left_leg.get_view()
+        self.back_right_leg: Leg = q.back_right_leg.get_view()
+
+        self.legs = [self.front_left_leg, self.front_right_leg,
+                     self.back_left_leg, self.back_right_leg]
+
+        self.legs_cw = [self.front_left_leg, self.front_right_leg,
+                        self.back_right_leg, self.back_left_leg]
+
+        for i, l in enumerate(self.legs):
+            l.idx = i
+            l.body = self
+
+        for i in range(-1, len(self.legs_cw) - 1):
+            self.legs_cw[i].prev = self.legs_cw[i-1]
+            self.legs_cw[i].next = self.legs_cw[i+1]
+
+
 class Quad:
     def __init__(self, model, fll, frl, bll, brl, sensor):
         self.model = model
@@ -218,10 +271,94 @@ class Quad:
             self.legs_cw[i].prev = self.legs_cw[i-1]
             self.legs_cw[i].next = self.legs_cw[i+1]
 
+    def get_view(self):
+        return QuadView(self)
+
+    def get_path_len(self, task) -> float:
+        pos_lst = [self.legs[task.idx].plan.targt.pos]
+        pos_lst.extend([p.pos for p in task.points])
+        pos_difs = [np.linalg.norm(p1 - p0)
+                    for p0, p1 in zip(pos_lst[:-1], pos_lst[1:])]
+        S = np.sum(np.array(pos_difs))
+        return S
+
+    def get_task_act(self, task):
+        l = self.legs[task.idx]
+        if len(task.points) == 0:
+            return FSMState.PENDING
+
+        if task.do_lift:
+            act = FSMState.ASCENDING
+            t_pt = task.points[-1]
+        else:
+            act = FSMState.TRAVERSING
+            t_pt = task.points[0]
+
+        S = np.linalg.norm(t_pt.pos - l.plan.target.pos)
+
+        if S == 0:
+            act = FSMState.PENDING
+
+        return act
+
+    def prepare_pending_points(self, task):
+        l = self.legs[task.idx]
+        pts = [DestPoint(np.copy(l.plan.target.pos), f_arr_unset(),
+                         ts=0, vel_ps=0.0)]
+        return pts
+
+    def prepare_ascending_points(self, task, n_steps):
+        pts = [DestPoint(task.points[-1].pos, f_arr_unset(),
+                         ts=n_steps)]
+        return pts
+
+    def prepare_traversing_points(self, task, speed_ps: float):
+        l = self.legs[task.idx]
+
+        # Getting positions of every path point
+        pos_lst = [self.legs[task.idx].plan.target.pos]
+        pos_lst.extend([p.pos for p in task.points])
+
+        # Getting lengths of every path interval
+        pos_difs = [0.0] + [np.linalg.norm(p1 - p0)
+                            for p0, p1 in zip(pos_lst[:-1], pos_lst[1:])]
+        # S = np.sum(np.array(pos_difs))
+
+        # Aggregating lengths of every path point
+        pos_dif_agr = []
+        pos_dif_agr_last = 0.0
+        for pd in pos_difs:
+            pos_dif_agr.append(pos_dif_agr_last + pd)
+            pos_dif_agr_last = pos_dif_agr[-1]
+
+        # Getting velocities of every path point
+        vels = map_ranges(
+            pos_dif_agr, pos_dif_agr[0], pos_dif_agr[-1], l.plan.target.vel_ps, speed_ps, default=speed_ps)
+        # Getting number of steps of every path point
+        n_steps_unrounded = [
+            2 * s / (v0 + v1) for s, v0, v1 in zip(pos_difs[1:], vels[:-1], vels[1:])]
+
+        # n_steps_unrounded = [2 * s / (v0 + v1) for s, v0, v1 in zip(pos_difs, np.array([l.plan.target.vel_ps] + list(vels[:-1])), vels) ]
+        # Aggregating number of steps of every path point
+        n_steps_unr_agr = []
+        n_steps_unr_agr_last = 0.0
+        for s in n_steps_unrounded:
+            n_steps_unr_agr.append(n_steps_unr_agr_last + s)
+            n_steps_unr_agr_last = n_steps_unr_agr[-1]
+
+        # Rounding aggregated number of steps of every path point
+        n_steps_rounded_agr = [round(s) for s in n_steps_unr_agr]
+
+        # Getting DestPoint of every path point
+        pts = [DestPoint(p, f_arr_unset(), ts=s, vel_ps=vps)
+               for p, s, vps in zip(pos_lst[1:], n_steps_rounded_agr, vels[1:])]
+
+        return pts
+
     def set_target(self, tasks):
         # init_pace = 5.0
         # init_pace = 1.6
-        init_pace = 0.7
+        # init_pace = 0.7
         speed_ps = 0.001
 
         for t in tasks:
@@ -229,33 +366,22 @@ class Quad:
             S = 0.0
             est_n_steps = 0
 
-            l_target = np.copy(l.plan.target.pos)
+            act = self.get_task_act(t)
 
-            if len(t.points) != 0:
-                l_target = t.points[0].pos  # TODO add multiple targets
-                S = np.linalg.norm(l_target - l.plan.target.pos)
+            match act:
+                case FSMState.PENDING:
+                    speed_func = do_nothing
+                    pts = self.prepare_pending_points(t)
 
-            if len(t.points) == 0 or S == 0.0:
-                speed_func = do_nothing
-                act = FSMState.PENDING
-                dst = DestPoint(l_target, f_arr_unset(), ts=0, vel_ps=0.0)
-            elif t.do_lift:
-                act = FSMState.ASCENDING
-                # est_n_steps = 500
-                # est_n_steps = 10
-                est_n_steps = 100
-                dst = DestPoint(l_target, f_arr_unset(),
-                                ts=est_n_steps)
-                speed_func = variable_speed_func
-            else:
-                act = FSMState.TRAVERSING
-                # adds error
-                n_step = round(2 * S / (l.plan.target.vel_ps + speed_ps))
-                dst = DestPoint(l_target, f_arr_unset(), ts=n_step)
-                est_n_steps = n_step
-                dst.vel_ps = speed_ps
-                speed_func = gradual_speed_func
+                case FSMState.ASCENDING:
+                    # est_n_steps = 500
+                    # est_n_steps = 10
+                    est_n_steps = 100
+                    speed_func = variable_speed_func
+                    pts = self.prepare_ascending_points(t, est_n_steps)
 
-            # l_target[2] = l.def_pos[2]
-            # l_target = l.def_pos + t.points[0].pos  # TODO add multiple targets
-            l.make_plan(dst, act, speed_func, est_n_steps)
+                case FSMState.TRAVERSING:
+                    speed_func = gradual_speed_func
+                    pts = self.prepare_traversing_points(t, speed_ps)
+
+            l.make_plan(pts, act, speed_func)
