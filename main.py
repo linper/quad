@@ -3,11 +3,13 @@ import time
 import numpy as np
 import math
 from ground_view import tk_start, SPoint, GoTask
+from stance import init_debug_params, clear_saves
 import matplotlib.pyplot as plt
 import gc
 
 from consts import *
 from balance import *
+from interp import *
 from misc import ActCmd
 from leg import Leg
 from quad import Quad
@@ -15,16 +17,17 @@ import multiprocessing as mp
 
 log_dt_len = 1500
 log_dt_idx = 0
-log_data: np.ndarray = np.zeros((5, log_dt_len), dtype=np.float)
+log_data: np.ndarray = np.zeros((3, log_dt_len), dtype=float)
 
 
-def plot_heigths():
+def plot_cmd():
     plt.figure()
     time_data = list(range(log_dt_len))
-    for i, l in enumerate(q.legs):
-        plt.plot(time_data, log_data[i, :])
+    # for i, l in enumerate(q.legs):
+    # plt.plot(time_data, log_data[i, :])
 
-    plt.plot(time_data, log_data[4, :], color="black")
+    plt.plot(time_data, log_data[0, :], color="red")
+    plt.plot(time_data, log_data[1, :], color="green")
     plt.grid("both")
     plt.show()
 
@@ -40,19 +43,17 @@ def get_commands():
         arr = q_from_gv.get()
         got_target = True
 
-    # while not q_cmd.empty():
-        # cmd = q_cmd.get()
-        # if cmd == ActCmd.CLEAR:
-        # arr = [GoTask(i) for i in range(4)]
-        # got_target = True
-        # elif cmd == ActCmd.PLOT:
-        # plot_heigths()
+    while not q_cmd.empty():
+        cmd = q_cmd.get()
+        if cmd == ActCmd.PLOT:
+            plot_cmd()
 
     q.sens_info.update()
 
-    log_entry = [l.position[2] + l.plan.adj[2] for l in q.legs]
-    log_entry.append(q.sens_info.avg_leg_h)
-    log_data[:, log_dt_idx] = np.array(log_entry)
+    # log_entry = [l.position[2] + l.plan.adj[2] for l in q.legs]
+    # log_entry.append(q.sens_info.avg_leg_h)
+    # log_data[:, log_dt_idx] = np.array(log_entry)
+    log_data[:, log_dt_idx] = q.sens_info.base_force_vector.copy()
     log_dt_idx = (log_dt_idx + 1) % log_dt_len
 
     if got_target:
@@ -79,7 +80,11 @@ def get_commands():
 
 
 def precompile():
+    ellipse_point_inside(3, 4, 1, 3)
+    ellipse_line_intersect(3, 4, 1, 3)
+    get_2x2_rotation_matrix_from_angle(0.5)
     get_vectors_angle(np.array([1.0, 2.0]), np.array([2.0, 1.1]))
+    get_vectors_sine(np.array([1.0, 2.0]), np.array([2.0, 1.1]))
     get_mv_dot_product(identity(2), np.array([2.0, 1.1]))
     get_rotation_matrix_from_two_vectors(
         np.array([1.0, 2.0]), np.array([2.0, 1.1]))
@@ -183,9 +188,12 @@ touch_force_max = np.array([0, 0, 0, 0])
 
 start_stop_param = p.addUserDebugParameter("stop/go", 0, 0.001, 0.)
 
-x_par = p.addUserDebugParameter("x", -0.3, 0.3, 0)
-y_par = p.addUserDebugParameter("y", -0.2, 0.2, 0.0)
-z_par = p.addUserDebugParameter("z", -0.25, 0.2, 0.0)
+# ev_prox_par = p.addUserDebugParameter("prox", 0.0, 1., EV_MIN_PROX_C)
+# ev_avg_par = p.addUserDebugParameter("avg", 0.0, 1., EV_AVG_C)
+# ev_std_par = p.addUserDebugParameter("std", 0.0, 1., EV_STD_C)
+# ev_edge_par = p.addUserDebugParameter("edge", 0.0, 1., EV_EDGE_C)
+# ev_ap_dir_par = p.addUserDebugParameter("ap_dir", 0.0, 1., EV_AP_DIR_C)
+# ev_cp_dir_par = p.addUserDebugParameter("cp_dir", 0.0, 1., EV_CP_DIR_C)
 
 
 # increase grip
@@ -200,6 +208,8 @@ q_from_gv = mp.Queue(10)
 q_cmd = mp.Queue(10)
 
 precompile()
+init_debug_params()
+clear_saves()
 
 gv = mp.Process(target=tk_start, args=(q_to_gv, q_from_gv, q_cmd))
 gv.start()

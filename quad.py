@@ -4,11 +4,16 @@ import pybullet as p
 import numpy as np
 import math
 import functools
+from stance import Stance
 from enum import IntEnum
-from interp import gradual_speed_func, variable_speed_func, do_nothing, get_cross_product, map_ranges, get_mv_dot_product
+from interp import gradual_speed_func, variable_speed_func, do_nothing, get_cross_product, map_ranges, get_mv_dot_product, strech_vector_to
 from plan import DestPoint
 # from ground_view import SPoint
 from fsm import FSMState, FSMAction, FSM
+import matplotlib.pyplot as plt
+
+pred_acc = []
+real_acc = []
 
 
 class TouchState(IntEnum):
@@ -61,6 +66,7 @@ class SensInfoView:
 class SensInfo:
     def __init__(self, q):
         self.host: Quad = q
+        self.b_sensor_mass:float = p.getDynamicsInfo(q.model, q.sensor)[0]
         self.avg_leg_h: float = LEG_TAR_H
         self.abs_std_leg_h: float = 0.0
         self.touch_force = np.zeros(4, dtype=int)
@@ -201,7 +207,7 @@ class SensInfo:
 
         # base force vector
         b_force = -np.array(p.getJointState(self.host.model,
-                            self.host.sensor)[2][slice(3)])
+                            self.host.sensor)[2][slice(3)]) / self.b_sensor_mass
         if len(self.bf_hist) >= self.bf_max:
             self.bf_hist.pop(0)
 
@@ -225,6 +231,25 @@ class SensInfo:
         self.abs_std_leg_h = np.average(np.array(
             [abs(l.position[2] - self.avg_leg_h) for l in self.host.legs if l.do_balance])) if len(ahl) else 0.0
 
+        global real_acc, pred_acc
+
+        if False and len(pred_acc) > 0:
+            if len(pred_acc) == len(real_acc):
+                plt.figure()
+                time_data = list(range(len(pred_acc)))
+
+                plt.plot(time_data, [a[0] for a in pred_acc], color="red")
+                plt.plot(time_data, [a[1] for a in pred_acc], color="green")
+                # plt.plot(time_data, [a[2] for a in pred_acc], color="blue")
+
+                plt.plot(time_data, [a[0] for a in real_acc], color="yellow")
+                plt.plot(time_data, [a[1] for a in real_acc], color="purple")
+                # plt.plot(time_data, [a[2] for a in real_acc], color="brown")
+                plt.grid("both")
+                plt.show()
+            else:
+                real_acc.append(self.base_force_vector)
+
 
 class QuadView:
     def __init__(self, q):
@@ -240,6 +265,9 @@ class QuadView:
         self.legs_cw = [self.front_left_leg, self.front_right_leg,
                         self.back_right_leg, self.back_left_leg]
 
+        self.dummy_leg = q.dummy_leg.get_view()
+        self.dummy_leg.body = self
+
         for i, l in enumerate(self.legs):
             l.idx = i
             l.body = self
@@ -252,8 +280,8 @@ class QuadView:
 class Quad:
     def __init__(self, model, fll, frl, bll, brl, sensor):
         self.model = model
-        self.sens_info = SensInfo(self)
         self.sensor = sensor
+        self.sens_info = SensInfo(self)
         self.front_left_leg: Leg = fll
         self.front_right_leg: Leg = frl
         self.back_left_leg: Leg = bll
@@ -262,6 +290,8 @@ class Quad:
         self.legs = [fll, frl, bll, brl]
         self.legs_cw = [fll, frl, brl, bll]
         self.sensors = [fll.sensor, frl.sensor, bll.sensor, brl.sensor, sensor]
+        self.dummy_leg = Leg.dummy()
+        self.dummy_leg.body = self
 
         for i, l in enumerate(self.legs):
             l.idx = i
@@ -313,10 +343,13 @@ class Quad:
         return pts
 
     def prepare_traversing_points(self, task, speed_ps: float):
-        l = self.legs[task.idx]
+        if task.idx == -1:
+            l = self.dummy_leg
+        else:
+            l = self.legs[task.idx]
 
         # Getting positions of every path point
-        pos_lst = [self.legs[task.idx].plan.target.pos]
+        pos_lst = [l.plan.target.pos]
         pos_lst.extend([p.pos for p in task.points])
 
         # Getting lengths of every path interval
@@ -356,14 +389,72 @@ class Quad:
         return pts
 
     def set_target(self, tasks):
+        # global pred_acc
+
+        is_glob_target = -1 in [t.idx for t in tasks if len(t.points) > 0]
+        com_set = -1 in [t.idx for t in tasks if len(t.points) > 0 and t.do_lift]
         # init_pace = 5.0
         # init_pace = 1.6
         # init_pace = 0.7
         speed_ps = 0.001
 
+        task = None
+        if is_glob_target:
+            print("found glob task")
+            task = [t for t in tasks if t.idx == -1][0]
+            # pts = self.prepare_traversing_points(task, speed_ps)
+            # self.dummy_leg.make_plan(
+                # pts, FSMState.TRAVERSING, gradual_speed_func)
+            # self.dummy_leg.fsm.execute()
+            # vel_lenghts = [s.vel_ps for s in self.dummy_leg.plan.steps]
+            # positions = [s.pos for s in self.dummy_leg.plan.steps]
+            # positions.append(np.zeros(3, dtype=float))
+            # positions.reverse
+
+            # velocities = [np.zeros(3, dtype=float)]
+            # velocities.extend([p2 - p1 for p1,
+                               # p2 in zip(positions[:-1], positions[1:])])
+
+            # accelerations = [np.zeros(3, dtype=float)]
+            # accelerations.extend([(v2 - v1) / STEP for v1,
+                                  # v2 in zip(velocities[:-1], velocities[1:])])
+            # pred_acc = accelerations
+
+            # plt.figure()
+            # plt.plot(list(range(len(accelerations))),
+                     # accelerations, color="red")
+            # plt.grid("both")
+            # plt.show()
+
+            # vel_lenghts.append(0.0)
+            # vel_lenghts.reverse()
+
+            # acc_lengths_ps = [v2 - v1 for v1,
+                              # v2 in zip(vel_lenghts[:-1], vel_lenghts[1:])]
+            # acc_ps = [strech_vector_to(s.vel, -a * (1 / STEP)) for a, s in zip(
+                # acc_lengths_ps, self.dummy_leg.plan.steps)]
+            # pred_acc = acc_ps
+            # TODO: Continue: test how much predicted acceleration differ from empyric <17-10-22, yourname> #
+
         for t in tasks:
+            if t.idx == -1:
+                continue
+
             l = self.legs[t.idx]
-            S = 0.0
+
+            
+            if task is not None and com_set:
+                    st = Stance(self, l, task.points[0].pos[:2])
+                    st.plot()
+            elif task is not None:
+                t.points.clear()
+                for p in task.points:
+                    pc = p.clone()
+                    pc.pos = - pc.pos + l.position
+                    # pc.pos = - pc.pos + l.def_pos
+                    t.points.append(pc)
+
+            # S = 0.0
             est_n_steps = 0
 
             act = self.get_task_act(t)

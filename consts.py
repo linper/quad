@@ -21,6 +21,14 @@ LEG_TAR_H = -0.26
 SOFT_HIT_THR = 0.02
 F_UNSET = float("NaN")
 
+# Grad. decend evaluation constants
+EV_MIN_PROX_C = 0.1
+EV_AVG_C = 0.7
+EV_STD_C = 0.15
+EV_EDGE_C = 0.5
+EV_AP_DIR_C = 0.25
+EV_CP_DIR_C = 0.05
+EV_SUP_TRI_C = 0.2
 
 # some aggregations
 FRONT_DIR_LEFT = [1, -1, -1]

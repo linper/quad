@@ -147,7 +147,6 @@ class Plan:
         self.steps = steps
 
     def step(self):
-        # TODO: performance: for 'steps' use array instead of list <09-10-22, yourname> #
         # self.last = self.steps[self.step_idx]
         # self.cur = self.steps[self.step_idx]
         # self.cur = self.steps[0]

@@ -18,6 +18,8 @@ class GoPoint:
     def __init__(self, pos: np.ndarray):
         self.pos: np.ndarray = pos
 
+    def clone(self):
+        return GoPoint(self.pos.copy())
 
 class GoTask:
     def __init__(self, idx: int, do_lift: bool = False):
@@ -69,7 +71,7 @@ class GrView:
         self.space.bind("<Double-Button-1>", self.btn_dbl_clk)
         self.space.grid(row=0, column=0)
         # self.saved: list = []
-        self.tasks: list = [GoTask(0), GoTask(1), GoTask(2), GoTask(3)]
+        self.tasks: list = [GoTask(-1), GoTask(0), GoTask(1), GoTask(2), GoTask(3)]
 
         b = Button(self.root, text="Go", command=self.send_go_cmd)
         b.place(x=0, y=self.height - 20)
@@ -77,6 +79,26 @@ class GrView:
         b.place(x=0, y=self.height - 50)
         b = Button(self.root, text="Plot", command=self.send_plot_cmd)
         b.place(x=0, y=self.height - 80)
+
+    def draw_legs_middle(self, q):
+        r = 5 
+
+        pos_lst = [l.position for l in q.legs if l.do_balance ]
+        
+        if len(pos_lst) == 0:
+            return 
+        
+        pos = np.average(np.array(pos_lst), axis=0)
+        
+        pt = self.mul * pos * \
+            np.array([1, 1, 1]) + \
+            np.array([self.height / 2, self.width / 2, 0])
+
+        self.space.create_oval(pt[1] - r, pt[0] - r,
+                               pt[1] + r, pt[0] + r, fill="black")
+        # self.space.create_oval(pt[0] - r, pt[1] - r,
+                               # pt[0] + r, pt[1] + r, fill="black")
+        
 
     def draw_leg_circle(self, leg, q: Quad):
         force = q.sens_info.touch_force[leg.idx]
@@ -199,11 +221,24 @@ class GrView:
 
     def draw_tasks(self):
         r = 15
-        for i, t in enumerate(self.tasks):
-            leg = self.q.legs[i]
+        for t in self.tasks:
+            if t.idx == -1:
+                pos_lst = [l.position for l in self.q.legs if l.do_balance]
+                if len(pos_lst) > 0:
+                    base_pos = np.average(np.array(pos_lst), axis=0)
+                else:
+                    base_pos = np.array([0.0, 0.0, 0.0])
+                # base_pos = np.array([0.0, 0.0, 0.0])
+
+                l_pos = np.array([0.0, 0.0, 0.0])
+                # print(f"base_pos: {l_pos}")
+            else:
+                l_pos = self.q.legs[t.idx].position 
+                base_pos = np.array([0.0, 0.0, 0.0])
+
             color = "red" if t.do_lift else "blue"
 
-            last_pt = self.mul * leg.position * \
+            last_pt = self.mul * (l_pos + base_pos ) * \
                 np.array([1, 1, 1]) + \
                 np.array([self.height / 2, self.width / 2, 0])
 
@@ -212,7 +247,7 @@ class GrView:
                                        last_pt[1] + r, last_pt[0] + r, width=3, outline=color)
 
             for p in t.points:
-                pt = self.mul * p.pos * \
+                pt = self.mul * (p.pos + base_pos) * \
                     np.array([1, 1, 1]) + \
                     np.array([self.height / 2, self.width / 2, 0])
 
@@ -248,7 +283,12 @@ class GrView:
 
         for t in self.tasks:
             t.clear()
-            t.add_pt(GoPoint(self.q.legs[t.idx].def_pos))
+            # if t.idx == -1:
+                # t.add_pt(GoPoint(np.zeros(3, dtype=float)))
+            # else:
+                # t.add_pt(GoPoint(self.q.legs[t.idx].def_pos))
+            if t.idx != -1:
+                t.add_pt(GoPoint(self.q.legs[t.idx].def_pos))
 
         # self.q_cmd.put(ActCmd.CLEAR)
 
@@ -273,9 +313,13 @@ class GrView:
         err = 10
 
         #  Returning on existing point or leg hit
-        for i, t in enumerate(self.tasks):
-            leg = self.q.legs[i]
-            s = self.mul * leg.position * \
+        for t in self.tasks:
+            if t.idx == -1:
+                l_pos = np.array([0.0, 0.0, 0.0])
+            else:
+                l_pos = self.q.legs[t.idx].position 
+
+            s = self.mul * l_pos * \
                 np.array([1, 1, 1]) + \
                 np.array([self.height / 2, self.width / 2, 0])
 
@@ -293,8 +337,11 @@ class GrView:
         for t in self.tasks:
             if t.active:
                 pos = (np.array([ev.y, ev.x, 0.0]) - np.array(
-                    [self.height / 2, self.width / 2, 0])) / self.mul
-                pos[2] = leg.def_pos[2]
+                    [self.height / 2, self.width / 2, 0.0])) / self.mul
+
+                if t.idx != -1:
+                    pos[2] = self.q.legs[t.idx].def_pos[2]
+
                 t.add_pt(GoPoint(pos))
 
     def btn_dbl_clk(self, ev):
@@ -302,9 +349,13 @@ class GrView:
         # print("dbl clicked")
         err = 10
 
-        for i, t in enumerate(self.tasks):
-            leg = self.q.legs[i]
-            s = self.mul * leg.position * \
+        for t in self.tasks:
+            if t.idx == -1:
+                l_pos = np.array([0.0, 0.0, 0.0])
+            else:
+                l_pos = self.q.legs[t.idx].position 
+
+            s = self.mul * l_pos * \
                 np.array([1, 1, 1]) + \
                 np.array([self.height / 2, self.width / 2, 0])
 
@@ -336,6 +387,7 @@ class GrView:
         self.draw_tasks()
         self.draw_perimeter(q)
 
+        self.draw_legs_middle(q)
         for l in q.legs:
             self.draw_leg_circle(l, q)
             self.draw_leg_adjust(l, q)

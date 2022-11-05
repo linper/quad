@@ -86,6 +86,33 @@ def variable_speed_func(d1, d2):
     return mod_dists, vels_ps
 
 
+@njit
+def roots2(a, b, c):
+    D = (b*b - 4*a*c)**0.5
+    if D >= 0:
+        return True, (-b + D)/(2*a), (-b - D)/(2*a)
+    else:
+        return False, 0.0, 0.0
+
+
+@njit
+def ellipse_point_inside(a, b, x, y):
+    val = ((x*x)/(a*a)) + ((y*y)/(b*b))
+    return val <= 1, val**0.5
+
+
+@njit
+def ellipse_line_intersect(a, b, k, c):
+    ra = (k*k*a*a)+b*b
+    rb = 2*k*c*(a*a)
+    rc = ((c*c)-(b*b))*(a*a)
+    inter, r1, r2 = roots2(ra, rb, rc)
+    if not inter:
+        return False, np.array([0.0, 0.0]), np.array([0.0, 0.0])
+    else:
+        return True, np.array([r1, k*r1+c]), np.array([r2, k*r2+c])
+
+
 def line_cof(x1, y1, x2, y2):
     fi = 0.0
     if x2 == x1:
@@ -310,6 +337,16 @@ def get_vectors_cosine(a, b):
 
 
 @njit
+def get_vectors_sine(a, b):
+    la = np.linalg.norm(a)
+    lb = np.linalg.norm(b)
+    if la == 0 or lb == 0:
+        return 0.0
+    else:
+        return np.linalg.norm(get_cross_product(a, b)) / (la * lb)
+
+
+@njit
 def get_vectors_angle(a, b):
     return math.acos(get_vectors_cosine(a, b))
 
@@ -326,8 +363,8 @@ def get_dot_product(a, b):
 
 
 @njit
-def get_mv_dot_product(a, b):
-    return np.sum(a * b, axis=1)
+def get_mv_dot_product(mat, vec):
+    return np.sum(mat * vec, axis=1)
 
 
 @njit
@@ -370,6 +407,21 @@ def get_4x4_from_3x3_mat(arr: np.ndarray):
 
 
 @njit
+def get_2x2_rotation_matrix_from_angle(phi):
+    matrix = np.zeros((2, 2), dtype=float)
+
+    alpha_sin = math.sin(phi)
+    alpha_cos = math.cos(phi)
+
+    matrix[0, 0] = alpha_cos
+    matrix[0, 1] = -alpha_sin
+    matrix[1, 0] = alpha_sin
+    matrix[1, 1] = alpha_cos
+
+    return matrix
+
+
+@njit
 def strech_vector_to(v: np.ndarray, lenght):
     lv = np.linalg.norm(v)
     if lv != 0:
@@ -378,5 +430,14 @@ def strech_vector_to(v: np.ndarray, lenght):
         return np.array([0.0, 0.0, 0.0])
 
 
+# def point_line_projection(pt, k, b):
+    # pt2 = intersect(k, b, -(1/k),  pt[1] + pt[0]/k)
+    # return pt2
+
+
 def vector_projection(from_vec, to_vec):
     return (get_dot_product(from_vec, to_vec)) / np.linalg.norm(to_vec)
+
+
+def xor(a, b):
+    return bool((a and not b) or (not a and b))

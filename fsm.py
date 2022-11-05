@@ -268,6 +268,14 @@ class FSM:
 
             p.plan_steps()
 
+            # if self.leg.name == "front_left":
+                # plt.figure()
+                # plt.plot(list(range(len(p.steps))), [s.vel_ps for s in p.steps], color="black")
+                # plt.plot(list(range(len(p.steps))), [s.pos[0] for s in p.steps], color="red")
+                # plt.plot(list(range(len(p.steps))), [s.pos[1] for s in p.steps], color="green")
+                # plt.grid("both")
+                # plt.show()
+
             p.need_plan = False
 
         if len(p.steps) == 0:

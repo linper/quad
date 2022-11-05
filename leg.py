@@ -51,8 +51,16 @@ class Leg:
         self.link_len = 0.1
         self.damp_len = 0.012
         self.stiffness_c = 0.00005
+        self.ellipse_a = 0.21
+        self.ellipse_b = 0.18
         # self.stiffness_c = 2.5
         self.do_balance: bool = True
+
+    @classmethod
+    def dummy(cls):
+        obj = cls("dummy", None, None, None, None, None, None, np.zeros(
+            3), np.zeros(3, dtype=float), np.zeros(3, dtype=float))
+        return obj
 
     def get_view(self):
         return LegView(self)
