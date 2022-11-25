@@ -51,8 +51,8 @@ class Leg:
         self.link_len = 0.1
         self.damp_len = 0.012
         self.stiffness_c = 0.00005
-        self.ellipse_a = 0.21
-        self.ellipse_b = 0.18
+        # self.ellipse_a = 0.21
+        # self.ellipse_b = 0.18
         # self.stiffness_c = 2.5
         self.do_balance: bool = True
 

@@ -23,11 +23,13 @@ class GoPoint:
 
 class GoTask:
     def __init__(self, idx: int, do_lift: bool = False):
-        self.points: list = []
-        self.idx: int = idx
-        self.do_lift: bool = do_lift
-        self.active: bool = False
-        self.dummy: bool = False
+        self.points: list=[]
+        self.direction: np.ndarray=np.array([-0.1, 0.0])
+        self.idx: int=idx
+        self.do_lift: bool=do_lift
+        self.active: bool=False
+        self.exp_set: bool=False # i.e. explicitly set
+        self.dummy: bool=False
 
     def add_pt(self, pt: GoPoint):
         self.points.append(pt)
@@ -36,93 +38,117 @@ class GoTask:
         self.points.pop(idx)
 
     def toggle_lift(self):
-        self.do_lift = not self.do_lift
+        self.do_lift=not self.do_lift
 
     def clear(self):
         self.points.clear()
-        self.do_lift = False
-        self.active = False
-        self.dummy= False
+        self.do_lift=False
+        self.active=False
+        self.dummy=False
+        self.exp_set=False
 
-
+class GoCmd:
+    def __init__(self, tasks):
+        self.tasks:list = tasks
+        self.test_mode = False
+        
 
 class SPoint:
     def __init__(self, x, y, color):
-        self.x = x
-        self.y = y
-        self.color = color
+        self.x=x
+        self.y=y
+        self.color=color
 
 
 class GrView:
     def __init__(self, q_from: mp.Queue, q_to: mp.Queue, q_cmd: mp.Queue):
-        self.q_from: mp.Queue = q_from
-        self.q_to: mp.Queue = q_to
-        self.q_cmd: mp.Queue = q_cmd
-        self.root = Tk()
-        self.mul = 800
-        self.height = 800
-        self.width = 600
-        self.path_sent = False
-        self.root.title = "ground view"
+        self.q_from: mp.Queue=q_from
+        self.q_to: mp.Queue=q_to
+        self.q_cmd: mp.Queue=q_cmd
+        self.root=Tk()
+        self.mul=800
+        self.height=800
+        self.width=600
+        self.path_sent=False
+        self.root.title="ground view"
         self.q: Quad
-        self.space = Canvas(self.root, background="white",
-                            height=self.height, width=self.width)
+        self.sel_mode=IntVar()
+        self.test_mode=IntVar()
+        self.space=Canvas(self.root, background = "white",
+                            height = self.height, width = self.width)
         self.space.bind("<Button-1>", self.btn_clk)
         self.space.bind("<Double-Button-1>", self.btn_dbl_clk)
-        self.space.grid(row=0, column=0)
+        self.space.grid(row = 0, column = 0)
         # self.saved: list = []
-        self.tasks: list = [GoTask(-1), GoTask(0), GoTask(1), GoTask(2), GoTask(3)]
+        self.tasks: list=[GoTask(-1), GoTask(0),
+                                 GoTask(1), GoTask(2), GoTask(3)]
+        self.task_cmd = GoCmd(self.tasks)
+        b= Button(self.root, text = "Go", command =self.send_go_cmd)
+        b.place(x = 0, y =self.height - 20)
+        b= Button(self.root, text = "Clear", command =self.send_clear_cmd)
+        b.place(x = 0, y =self.height - 50)
+        b= Button(self.root, text = "Plot", command =self.send_plot_cmd)
+        b.place(x = 0, y =self.height - 80)
+        R1= Radiobutton(self.root, text = "Set target", variable =self.sel_mode, value=0)
+        R1.place(x = 0, y =self.height + 25)
 
-        b = Button(self.root, text="Go", command=self.send_go_cmd)
-        b.place(x=0, y=self.height - 20)
-        b = Button(self.root, text="Clear", command=self.send_clear_cmd)
-        b.place(x=0, y=self.height - 50)
-        b = Button(self.root, text="Plot", command=self.send_plot_cmd)
-        b.place(x=0, y=self.height - 80)
+        R2= Radiobutton(self.root, text = "Set direction", variable =self.sel_mode, value=1)
+        R2.place(x = 0, y =self.height + 5)
+        self.sel_mode.set(0)
+
+        R3= Radiobutton(self.root, text = "Do move", variable=self.test_mode, value=0, command=self.sel_test_mode)
+        R3.place(x = 100, y =self.height + 25)
+
+        R4= Radiobutton(self.root, text = "Test move", variable=self.test_mode, value=1, command=self.sel_test_mode)
+        R4.place(x = 100, y =self.height + 5)
+        self.test_mode.set(0)
+
+    def sel_test_mode(self):
+        self.task_cmd.test_mode = bool(self.test_mode.get())
 
     def draw_legs_middle(self, q):
-        r = 5 
+        r = 5
 
-        pos_lst = [l.position for l in q.legs if l.do_balance ]
-        
+        pos_lst = [l.position for l in q.legs if l.do_balance]
+
         if len(pos_lst) == 0:
-            return 
-        
-        pos = np.average(np.array(pos_lst), axis=0)
-        
+            return
+
+        pos = np.average(np.array(pos_lst), axis = 0)
+
         pt = self.mul * pos * \
             np.array([1, 1, 1]) + \
             np.array([self.height / 2, self.width / 2, 0])
 
         self.space.create_oval(pt[1] - r, pt[0] - r,
-                               pt[1] + r, pt[0] + r, fill="black")
+                               pt[1] + r, pt[0] + r, fill = "black")
         # self.space.create_oval(pt[0] - r, pt[1] - r,
                                # pt[0] + r, pt[1] + r, fill="black")
-        
+
 
     def draw_leg_circle(self, leg, q: Quad):
-        force = q.sens_info.touch_force[leg.idx]
-        damp_val_n = q.sens_info.damp[leg.idx]
+        force=q.sens_info.touch_force[leg.idx]
+        damp_val_n=q.sens_info.damp[leg.idx]
 
         if force > 0:
-            color = "green"
+            color="green"
         elif damp_val_n > SOFT_HIT_THR:
-            color = "yellow"
+            color="yellow"
         else:
-            color = "red"
+            color="red"
 
-        r = 6
-        pt = self.mul * leg.position * \
+        r=6
+        pt=self.mul * leg.position * \
             np.array([1, 1, 1]) + \
             np.array([self.height / 2, self.width / 2, 0])
         self.space.create_oval(pt[1] - r, pt[0] - r,
-                               pt[1] + r, pt[0] + r, fill=color)
-        leg_name_abr = "".join([c[0] for c in leg.name.split("_")])
+                               pt[1] + r, pt[0] + r, fill = color)
+        leg_name_abr="".join([c[0] for c in leg.name.split("_")])
         self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
-                               anchor=W, text=f"{leg_name_abr}:{FSM.state_str(leg.fsm)}:{round(leg.plan.adj[2], 3)}:{round(leg.position[2], 3)}")
+                               anchor = W, text =f"{leg_name_abr}:{FSM.state_str(leg.fsm)}:{round(leg.plan.adj[2], 3)}:{round(leg.position[2], 3)}")
 
     def draw_circle(self, pos, color):
-        r = 6
+        r=6
         self.space.create_oval(
             pos[1] - r, pos[0] - r, pos[1] + r, pos[0] + r, fill=color)
 
@@ -228,10 +254,16 @@ class GrView:
                     base_pos = np.average(np.array(pos_lst), axis=0)
                 else:
                     base_pos = np.array([0.0, 0.0, 0.0])
-                # base_pos = np.array([0.0, 0.0, 0.0])
 
                 l_pos = np.array([0.0, 0.0, 0.0])
-                # print(f"base_pos: {l_pos}")
+                
+                # draw direction
+                mid = np.array([self.height / 2, self.width / 2, 0])
+                pt = self.mul * t.direction + mid[:2]
+                self.space.create_line(
+                    mid[1], mid[0], pt[1], pt[0], width=3, fill="purple")
+                self.draw_circle(pt, "purple")
+
             else:
                 l_pos = self.q.legs[t.idx].position 
                 base_pos = np.array([0.0, 0.0, 0.0])
@@ -268,7 +300,7 @@ class GrView:
         self.__clear_dummies()
         # saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
         # [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
-        self.q_to.put(self.tasks)
+        self.q_to.put(self.task_cmd)
         for t in self.tasks:
             t.active = False
             t.dummy = True
@@ -312,6 +344,14 @@ class GrView:
         self.__clear_dummies()
         err = 10
 
+        if self.sel_mode.get() == 1:
+            pos = (np.array([ev.y, ev.x]) - np.array(
+                [self.height / 2, self.width / 2])) / self.mul
+
+            ct = [t for t in self.tasks if t.idx == -1][0]
+            ct.direction= pos
+            return
+
         #  Returning on existing point or leg hit
         for t in self.tasks:
             if t.idx == -1:
@@ -343,6 +383,7 @@ class GrView:
                     pos[2] = self.q.legs[t.idx].def_pos[2]
 
                 t.add_pt(GoPoint(pos))
+                t.exp_set = True
 
     def btn_dbl_clk(self, ev):
         self.__clear_dummies()
@@ -377,6 +418,8 @@ class GrView:
 
                 if abs(s[1] - ev.x) <= err and abs(s[0] - ev.y) <= err:
                     t.points.pop(j)
+                    if len(t.points) == 0:
+                        t.exp_set = False
 
     def update(self, q: Quad):
         self.root.update()

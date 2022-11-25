@@ -2,18 +2,19 @@ import pybullet as p
 import time
 import numpy as np
 import math
-from ground_view import tk_start, SPoint, GoTask
-from stance import init_debug_params, clear_saves
 import matplotlib.pyplot as plt
 import gc
+import multiprocessing as mp
 
+import wrapper as w
 from consts import *
 from balance import *
 from interp import *
 from misc import ActCmd
 from leg import Leg
+from ground_view import tk_start, SPoint, GoTask, GoCmd
+from stance import init_debug_params, clear_saves
 from quad import Quad
-import multiprocessing as mp
 
 log_dt_len = 1500
 log_dt_idx = 0
@@ -36,11 +37,11 @@ def get_commands():
     global gv
     global log_dt_idx
 
-    arr: list
+    cmd: GoCmd
     got_target = False
 
     while not q_from_gv.empty():
-        arr = q_from_gv.get()
+        cmd = q_from_gv.get()
         got_target = True
 
     while not q_cmd.empty():
@@ -57,7 +58,7 @@ def get_commands():
     log_dt_idx = (log_dt_idx + 1) % log_dt_len
 
     if got_target:
-        q.set_target(arr)
+        q.set_target(cmd)
 
     # balance_diff = get_balance_diff(q)
     for l in q.legs:
@@ -80,6 +81,12 @@ def get_commands():
 
 
 def precompile():
+    is_inside(np.array([0.0, 0.0]), np.array([-1.0, -2.0]),
+              np.array([2.0, 1.1]),  np.array([3.0, 4.1]))
+    point_to_sect(np.array([1.0, 1.0]), np.array(
+        [1.0, 2.0]),  np.array([2.0, 1.1]))
+    point_to_line2(np.array([1.0, 1.0]), np.array(
+        [1.0, 2.0]),  np.array([2.0, 1.1]))
     ellipse_point_inside(3, 4, 1, 3)
     ellipse_line_intersect(3, 4, 1, 3)
     get_2x2_rotation_matrix_from_angle(0.5)
@@ -180,14 +187,15 @@ brl = Leg("back_right", base_j, shoulder_j, knee_j, heel_j, damp_j,
 sensor_b = jointNameToId.get('base_sensor')
 q: Quad = Quad(model, fll, frl, bll, brl, sensor_b)
 
+change_leg_exc((brl.def_pos[0] - frl.def_pos[0]) /
+               (brl.def_pos[1] - fll.def_pos[1]))
 
 base_orientation = np.array(p.getEulerFromQuaternion(
     p.getBasePositionAndOrientation(q.model)[1]))
 base_position = np.array(p.getBasePositionAndOrientation(q.model)[0])
 touch_force_max = np.array([0, 0, 0, 0])
 
-start_stop_param = p.addUserDebugParameter("stop/go", 0, 0.001, 0.)
-
+# start_stop_param = p.addUserDebugParameter("stop/go", 0, 0.001, 0.)
 # ev_prox_par = p.addUserDebugParameter("prox", 0.0, 1., EV_MIN_PROX_C)
 # ev_avg_par = p.addUserDebugParameter("avg", 0.0, 1., EV_AVG_C)
 # ev_std_par = p.addUserDebugParameter("std", 0.0, 1., EV_STD_C)
@@ -207,6 +215,7 @@ q_to_gv = mp.Queue(1)
 q_from_gv = mp.Queue(10)
 q_cmd = mp.Queue(10)
 
+w.init()
 precompile()
 init_debug_params()
 clear_saves()

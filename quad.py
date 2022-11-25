@@ -66,7 +66,7 @@ class SensInfoView:
 class SensInfo:
     def __init__(self, q):
         self.host: Quad = q
-        self.b_sensor_mass:float = p.getDynamicsInfo(q.model, q.sensor)[0]
+        self.b_sensor_mass: float = p.getDynamicsInfo(q.model, q.sensor)[0]
         self.avg_leg_h: float = LEG_TAR_H
         self.abs_std_leg_h: float = 0.0
         self.touch_force = np.zeros(4, dtype=int)
@@ -388,53 +388,20 @@ class Quad:
 
         return pts
 
-    def set_target(self, tasks):
-        # global pred_acc
-
-        is_glob_target = -1 in [t.idx for t in tasks if len(t.points) > 0]
-        com_set = -1 in [t.idx for t in tasks if len(t.points) > 0 and t.do_lift]
-        # init_pace = 5.0
-        # init_pace = 1.6
-        # init_pace = 0.7
+    def set_target(self, cmd):
+        tasks = cmd.tasks
         speed_ps = 0.001
 
-        task = None
-        if is_glob_target:
-            print("found glob task")
-            task = [t for t in tasks if t.idx == -1][0]
-            # pts = self.prepare_traversing_points(task, speed_ps)
-            # self.dummy_leg.make_plan(
-                # pts, FSMState.TRAVERSING, gradual_speed_func)
-            # self.dummy_leg.fsm.execute()
-            # vel_lenghts = [s.vel_ps for s in self.dummy_leg.plan.steps]
-            # positions = [s.pos for s in self.dummy_leg.plan.steps]
-            # positions.append(np.zeros(3, dtype=float))
-            # positions.reverse
+        com_task = cmd.tasks[0]
 
-            # velocities = [np.zeros(3, dtype=float)]
-            # velocities.extend([p2 - p1 for p1,
-                               # p2 in zip(positions[:-1], positions[1:])])
-
-            # accelerations = [np.zeros(3, dtype=float)]
-            # accelerations.extend([(v2 - v1) / STEP for v1,
-                                  # v2 in zip(velocities[:-1], velocities[1:])])
-            # pred_acc = accelerations
-
-            # plt.figure()
-            # plt.plot(list(range(len(accelerations))),
-                     # accelerations, color="red")
-            # plt.grid("both")
-            # plt.show()
-
-            # vel_lenghts.append(0.0)
-            # vel_lenghts.reverse()
-
-            # acc_lengths_ps = [v2 - v1 for v1,
-                              # v2 in zip(vel_lenghts[:-1], vel_lenghts[1:])]
-            # acc_ps = [strech_vector_to(s.vel, -a * (1 / STEP)) for a, s in zip(
-                # acc_lengths_ps, self.dummy_leg.plan.steps)]
-            # pred_acc = acc_ps
-            # TODO: Continue: test how much predicted acceleration differ from empyric <17-10-22, yourname> #
+        if cmd.test_mode:
+            com_target = com_task.points[0].pos[:2] if len(
+                com_task.points) > 0 else np.array([0.0, 0.0])
+            l_pos = np.array([l.position[:2] for l in self.legs])
+            l_def_pos = np.array([l.def_pos[:2] for l in self.legs])
+            st = Stance(l_pos, l_def_pos, com_task.direction,
+                        com_target)
+            st.plot()
 
         for t in tasks:
             if t.idx == -1:
@@ -442,17 +409,15 @@ class Quad:
 
             l = self.legs[t.idx]
 
-            
-            if task is not None and com_set:
-                    st = Stance(self, l, task.points[0].pos[:2])
-                    st.plot()
-            elif task is not None:
-                t.points.clear()
-                for p in task.points:
-                    pc = p.clone()
-                    pc.pos = - pc.pos + l.position
-                    # pc.pos = - pc.pos + l.def_pos
-                    t.points.append(pc)
+            # if com_task.do_lift and len(com_task.points) > 0:
+            if not cmd.test_mode and len(com_task.points) > 0:
+                if not t.exp_set:
+                    t.points.clear()
+                    for p in com_task.points:
+                        pc = p.clone()
+                        pc.pos = - pc.pos + l.position
+                        # pc.pos = - pc.pos + l.def_pos
+                        t.points.append(pc)
 
             # S = 0.0
             est_n_steps = 0

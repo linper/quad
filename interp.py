@@ -113,6 +113,7 @@ def ellipse_line_intersect(a, b, k, c):
         return True, np.array([r1, k*r1+c]), np.array([r2, k*r2+c])
 
 
+@njit
 def line_cof(x1, y1, x2, y2):
     fi = 0.0
     if x2 == x1:
@@ -123,6 +124,7 @@ def line_cof(x1, y1, x2, y2):
     return k, b
 
 
+@njit
 def intersect(k1, b1, k2, b2):
     if round(k1, 4) == round(k2, 4):
         return False, 0, 0
@@ -132,6 +134,7 @@ def intersect(k1, b1, k2, b2):
     return True, x, y
 
 
+@njit
 def sect_intersect(x11, y11, x12, y12, x21, y21, x22, y22):
     k1, b1 = line_cof(x11, y11, x12, y12)
     k2, b2 = line_cof(x21, y21, x22, y22)
@@ -430,14 +433,86 @@ def strech_vector_to(v: np.ndarray, lenght):
         return np.array([0.0, 0.0, 0.0])
 
 
-# def point_line_projection(pt, k, b):
-    # pt2 = intersect(k, b, -(1/k),  pt[1] + pt[0]/k)
-    # return pt2
+@njit
+def point_line_projection(pt, k, b):
+    _, x, y = intersect(k, b, -(1/k),  pt[1] + pt[0]/k)
+    pt2 = np.array([x, y])
+    return pt2
 
 
+@njit
+def point_to_line(pt, k, b) -> float:
+    pt2 = point_line_projection(pt, k, b)
+    dist = np.linalg.norm(pt - pt2)
+    return dist
+
+
+@njit
+def point_to_sect(pt, pta, ptb):
+    k, b = line_cof(pta[0], pta[1], ptb[0], ptb[1])
+    if k == 0:
+        k += 0.000001  # some small value
+    ptc = point_line_projection(pt, k, b)
+    incl = round(min(pta[0], ptb[0]), 3) <= round(ptc[0], 3) <= round(max(pta[0], ptb[0]), 3) and round(
+        min(pta[1], ptb[1]), 3) <= round(ptc[1], 3) <= round(max(pta[1], ptb[1]), 3)
+    if not incl:
+        return -1.0
+
+    dist = point_to_line(pt, k, b)
+    return dist
+
+
+@njit
+def point_to_line2(pt, pta, ptb):
+    k, b = line_cof(pta[0], pta[1], ptb[0], ptb[1])
+    if k == 0:
+        k += 0.000001  # some small value
+    dist = point_to_line(pt, k, b)
+    return dist
+
+
+@njit
 def vector_projection(from_vec, to_vec):
     return (get_dot_product(from_vec, to_vec)) / np.linalg.norm(to_vec)
 
 
+@njit
+def area(p1, p2, p3):
+    return abs((p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) + p3[0] * (p1[1] - p2[1])) / 2.0)
+
+
+@njit
+def is_inside(p, a, b, c):
+    A = area(a, b, c)
+    A1 = area(p, b, c)
+    A2 = area(p, a, c)
+    A3 = area(p, a, b)
+
+    return (round(A, 5) == round(A1 + A2 + A3, 5))
+
+
+@njit
 def xor(a, b):
     return bool((a and not b) or (not a and b))
+
+
+def centroid_of_polygon(pts):
+    crs_sum = 0.0
+    x_sum = 0.0
+    y_sum = 0.0
+
+    for i in range(len(pts)):
+        j = (i + 1) % len(pts)
+        cross = pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1]
+        crs_sum += cross
+        x_sum += (pts[i][0] + pts[j][0]) * cross
+        y_sum += (pts[i][1] + pts[j][1]) * cross
+
+    z = 1.0 / (3.0 * crs_sum)
+    return z * np.array([x_sum, y_sum])
+
+
+def make_cw(arr):
+    cw_seq = [0, 1, 3, 2]
+    ans = np.array([arr[cw_seq[i]] for i in range(4)])
+    return ans
