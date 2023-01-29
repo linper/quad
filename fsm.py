@@ -168,7 +168,7 @@ class FSM:
             p.need_plan = False
 
         if len(p.steps) > 0:
-        # if p.step_idx < p.steps.size:
+            # if p.step_idx < p.steps.size:
             # global misc_data
             # misc_data.append(p.steps[0].z)
 
@@ -232,7 +232,7 @@ class FSM:
             p.reset()
             self.next(FSMAction.HIT)
         elif len(p.steps) > 0:
-        # elif p.step_idx < p.steps.size:
+            # elif p.step_idx < p.steps.size:
             p.step()
         else:
             p.reset()
@@ -247,39 +247,18 @@ class FSM:
             start = DestPoint(np.copy(p.cur.pos),
                               np.array([0.0, 0.0, 0.0]), ts=0, vel_ps=p.cur.vel_ps)
 
-            # start = p.cur.clone()
-            # start.ts = 0
-            # start.dx = 0.0
-            # start.dy = 0.0
-            # start.dz = 0.0
-
             p.raw_points[-1].set_vel(np.array([0.0, 0.0, 0.0]))
-
-            # end = DestPoint(np.copy(p.target.pos),
-                            # np.array([0.0, 0.0, 0.0]), ts=p.target.ts, vel_ps=p.target.vel_ps)
-
-            # self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.extend(p.raw_points)
-            # p.points.append(end)
 
             fill_diffs(p.points)
 
             p.plan_steps()
 
-            # if self.leg.name == "front_left":
-                # plt.figure()
-                # plt.plot(list(range(len(p.steps))), [s.vel_ps for s in p.steps], color="black")
-                # plt.plot(list(range(len(p.steps))), [s.pos[0] for s in p.steps], color="red")
-                # plt.plot(list(range(len(p.steps))), [s.pos[1] for s in p.steps], color="green")
-                # plt.grid("both")
-                # plt.show()
-
             p.need_plan = False
 
         if len(p.steps) == 0:
-        # if p.step_idx == p.steps.size:
             p.reset()
             self.next(FSMAction.END)
         else:

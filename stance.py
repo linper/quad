@@ -8,9 +8,11 @@ import os
 import math
 from numba import njit
 import matplotlib.pyplot as plt
-from interp import line_cof, get_mv_dot_product, get_2x2_rotation_matrix_from_angle, get_vectors_sine, get_vectors_cosine, get_vectors_angle, ellipse_line_intersect, ellipse_point_inside, vector_projection, strech_vector_to, xor, point_to_sect, area, is_inside, centroid_of_polygon, make_cw
+from interp import line_cof, get_mv_dot_product, get_2x2_rotation_matrix_from_angle, get_vectors_sine, get_vectors_cosine, get_vectors_angle, ellipse_line_intersect, ellipse_point_inside, vector_projection, strech_vector_to, xor, point_to_sect, area, is_inside, centroid_of_polygon, make_cw, is_inside2, gradual_speed_func, variable_speed_func, sect_triangle_intersect
 
 import wrapper as w
+from fsm import FSMState
+from plan import DestPoint, prepare_traversing_points, plan_steps, fill_diffs, line_pts_intersect_r2
 
 ev_prox_par = ev_avg_par = ev_std_par = ev_edge_par = ev_ap_dir_par = ev_cp_dir_par = ev_sup_tri_par = ev_junct_par = ev_com_bal_par = None
 
@@ -228,15 +230,39 @@ class Stance:
         self.orig_pts: np.ndarray = pos.copy()
         self.def_pts: np.ndarray = def_pos.copy()
         self.com: np.ndarray = com.copy()
+        self.bal_com: np.ndarray = np.array([0.0, 0.0])
+        self.com_off: np.ndarray = np.array([0.0, 0.0])
         self.direction: np.ndarray = direction.copy()
         self.pidx: int = -1
+        self.follow: bool= False
         self.min_loss: float = -1.0
         self.ell_a: float = LEG_ELLIPSE_A
         self.ell_b: float = LEG_ELLIPSE_B
 
+    def __str__(self):
+        return f"""pts:{[p.tolist() for p in self.pts]}
+                opts:{[p.tolist() for p in self.orig_pts]}
+                dpts:{[p.tolist() for p in self.def_pts]}
+                com:{[round(p, 3) for p in self.com]}
+                bal_com:{[round(p, 3) for p in self.bal_com]}
+                dir:{[round(p, 3) for p in self.direction]}
+                idx:{self.pidx}"""
+        
+
     def clone(self):
         return Stance(self.orig_pts.copy(), self.def_pts.copy(), self.direction.copy(), self.com.copy())
 
+    def pop(self):
+        en = self
+        while en.next is not None:
+            en = en.next
+
+        if en != self:
+            en.prev.next = None
+            en.prev = None
+
+        return en
+            
 
     def grad(self, spts, pts, def_pts, idx, d, ell_a, ell_b):
         delta = 1e-5
@@ -290,9 +316,8 @@ class Stance:
             if l < min_loss:
                 min_loss_idx = i
                 min_loss = l
-        
-        return paths[min_loss_idx][-1], min_loss
 
+        return paths[min_loss_idx][-1], min_loss
 
     def optimize(self, n):
         en = self
@@ -301,8 +326,17 @@ class Stance:
             en = en.next
 
         for _ in range(n):
-            print(f"pts:{en.pts} com:{en.com}")
-            opt_vals = [en.get_optimal_step(i, en.pts, en.def_pts, en.direction, en.ell_a, en.ell_b) for i in range(4)]
+            # print(f"pts:{en.pts} com:{en.com}")
+            print(en)
+            # new_stc = en.clone()
+            new_stc = Stance(en.pts, en.def_pts, en.direction, en.com)
+            en.next = new_stc
+            new_stc.prev = en
+
+            en = new_stc
+
+            opt_vals = [en.get_optimal_step(
+                i, en.pts, en.def_pts, en.direction, en.ell_a, en.ell_b) for i in range(4)]
 
             # Gets best point and loss of best leg
             min_loss_idx = 0
@@ -316,57 +350,108 @@ class Stance:
             en.pidx = min_loss_idx
             en.min_loss = min_pair[1]
             en.pts[en.pidx] = min_pair[0]
-            print(f"opt point:{min_pair[0]} loss:{min_pair[1]} pidx:{min_loss_idx}")
-            
+            print(
+                f"opt point:{min_pair[0]} loss:{min_pair[1]} pidx:{min_loss_idx}")
+
+
+            en.com_off = centroid_of_polygon(make_cw(en.pts))
+            # No need to roder legs clockwise, because 3 points are alway - triangle
+            self.bal_com = centroid_of_polygon(
+                [p for i, p in enumerate(en.pts) if en.pidx != i])
+
+            en.pts = en.pts - en.com_off
+            en.com = np.array([0.0, 0.0])
+
             # Creating next stance
-            com = centroid_of_polygon(make_cw(en.pts)) 
-            # new_stc = Stance(en.pts, en.def_pts, en.direction, com)
-            new_stc = Stance(en.pts - com, en.def_pts, en.direction, np.zeros(2, dtype=float))
+            # new_stc = Stance(en.pts - com, en.def_pts, en.direction, np.zeros(2, dtype=float))
 
             # Linking stances
-            en.next = new_stc
-            new_stc.prev = en
+            # en.next = new_stc
+            # new_stc.prev = en
 
-            en = new_stc
-    
+            # en = new_stc
+
+        return en
 
     def plot(self):
         INC = 0.01
         # n_opt_stances = 3
-        n_opt_stances = 10
+        n_opt_stances = 4
+        # n_opt_stances = 5
+        # n_opt_stances = 6
+        # n_opt_stances = 7
         stance_id = 0
-        # move_com = False
-        # move_com = True
 
         cofs_set()
 
-        self.optimize(n_opt_stances)
+        ret = self.get_movement(n_opt_stances)
+        # self.optimize(n_opt_stances)
+        return ret
 
-        en = self
-        
+        en = self.next
+
+        print("ploting")
         while en is not None and en.pidx != -1:
-            print(f"{en.orig_pts[en.pidx]} ({en.pidx})=> {en.pts[en.pidx]}")
+            # print(f"{en.orig_pts[en.pidx]} ({en.pidx})=> {en.pts[en.pidx]}")
             opt_pos = en.pts[en.pidx].copy()
             st_pos = en.def_pts[en.pidx].copy()
-            # com = en.com.copy()
             heatmap = np.zeros((64, 64), dtype=float)
             shp = heatmap.shape
+
+            en.pts[en.pidx] = en.orig_pts[en.pidx].copy()
+            # print(f"pts:{en.pts} com:{en.com}")
+
             for i, y in enumerate(range(shp[0] // 2 - shp[0], shp[0] // 2)):
                 for j, x in enumerate(range(shp[1] // 2 - shp[1], shp[1] // 2)):
                     en.pts[en.pidx] = st_pos + INC * np.array([x, y])
-                    heatmap[i, j] = en.eval_wrap()
+                    heatmap[i, j]= loss(en.pts, en.def_pts, en.pidx, en.direction, en.ell_a, en.ell_b)
+                    # heatmap[i, j] = en.eval_wrap()
 
             c = plt.imshow(heatmap.T, cmap="hot", interpolation="nearest")
             plt.colorbar(c)
 
-            en.pts[en.pidx] = opt_pos
-            
-            dp_mod = en.def_pts - st_pos
-            op_mod = en.orig_pts - st_pos
-            com = en.com - st_pos
 
-            print(f"{en.orig_pts[en.pidx]} ({en.pidx})==> {en.pts[en.pidx]}")
-            optimized_pt = en.pts[en.pidx] - st_pos
+            en.pts[en.pidx] = opt_pos
+            # print(f"{en.orig_pts[en.pidx]} ({en.pidx})==> {en.pts[en.pidx]}")
+            # print(
+                # f"opt point:{min_pair[0]} loss:{min_pair[1]} pidx:{min_loss_idx}")
+
+            dp_mod = en.def_pts - st_pos
+            # op_mod = (en.pts - st_pos)
+            op_mod = (en.orig_pts - st_pos)
+            com = en.com - st_pos
+            stable_idx = [i for i in range(4) if i != en.pidx][0]
+            off = en.pts[stable_idx] - en.orig_pts[stable_idx]
+            optimized_pt = en.pts[en.pidx] - st_pos + en.com_off
+
+            op_mod_plt = np.transpose(np.transpose(op_mod) / INC + shp[1] / 2)
+            dp_mod_plt = np.transpose(np.transpose(dp_mod) / INC + shp[1] / 2)
+            com_plt = com / INC + shp[1] / 2
+            optimized_pt_plt = optimized_pt / INC + shp[1] / 2
+
+            cw_idx = cw_seq[en.pidx]
+            op_bal_border = [pt for i, pt in enumerate(
+                make_cw(op_mod_plt)) if i != cw_idx]
+            op_bal_border.append(op_bal_border[0])
+            op_bal_border = np.array(op_bal_border)
+
+            # getting next balance border if it exists
+            if en.next is not None:
+                stable_idx = [i for i in range(4) if not i in [
+                    en.pidx, en.next.pidx]][0]
+                off = en.pts[stable_idx] - en.orig_pts[stable_idx]
+                # off = en.next.orig_pts[stable_idx] - en.orig_pts[stable_idx]
+                next_op_mod = en.next.orig_pts - st_pos - off
+                next_op_mod_plt = np.transpose(
+                    np.transpose(next_op_mod) / INC + shp[1] / 2)
+                next_op_bal_border = [pt for i, pt in enumerate(
+                    next_op_mod_plt) if i != en.next.pidx]
+
+                next_op_bal_border.append(next_op_bal_border[0])
+                next_op_bal_border = np.array(next_op_bal_border)
+
+                next_optimized_pt = en.next.pts[en.next.pidx] - st_pos
+                next_optimized_pt_plt = next_optimized_pt / INC + shp[1] / 2
 
             min_x = 0
             min_y = 0
@@ -377,20 +462,25 @@ class Stance:
                         min_x = x
                         min_y = y
                         min_val = heatmap[y, x]
-            
-            plt.scatter(dp_mod[:, 1] / INC + shp[0] / 2,
-                        dp_mod[:, 0] / INC + shp[1] / 2, color="blue", label="default")
-            plt.scatter(op_mod[:, 1] / INC + shp[0] / 2,
-                        op_mod[:, 0] / INC + shp[1] / 2, color="green", label="original")
+            print(
+                f"opt point:{st_pos + INC * (np.array([min_x, min_y] - np.array(shp) / 2))} loss:{min_val}")
+
+            plt.scatter(dp_mod_plt[:, 1], dp_mod_plt[:, 0],
+                        color="blue", label="default")
+            plt.scatter(op_mod_plt[:, 1], op_mod_plt[:, 0],
+                        color="green", label="original")
+            plt.plot(op_bal_border[:, 1], op_bal_border[:,
+                     0], color="green", label="_nolegend_")
+            if en.next is not None:
+                plt.scatter(
+                    next_optimized_pt_plt[1], next_optimized_pt_plt[0], color="orange", label="_nolegend_")
+                plt.plot(next_op_bal_border[:, 1], next_op_bal_border[:, 0],
+                         color="olive", label="_nolegend_", linestyle="dashed")
             plt.scatter(min_y, min_x, color="red",
                         label=f"min IT:{round(min_val, 4)}")
-
-            plt.scatter(optimized_pt[1] / INC + shp[0] / 2,
-                        optimized_pt[0] / INC + shp[1] / 2, color="orange",
-                        label=f"min GD:{round(en.min_loss, 4)}")
-            plt.scatter(com[1] / INC + shp[0] / 2,
-                        com[0] / INC + shp[1] / 2, color="black",
-                        label=f"com")
+            plt.scatter(optimized_pt_plt[1], optimized_pt_plt[0],
+                        color="orange", label=f"min GD:{round(en.min_loss, 4)}")
+            plt.scatter(com_plt[1], com_plt[0], color="black", label=f"com")
 
             plt.legend()
             plt.title(f"{datetime.now()}_{stance_id}")
@@ -400,100 +490,173 @@ class Stance:
             en = en.next
             stance_id += 1
 
+    def get_movement(self, targetg_n_st):
+        n_st = 0
+        k = 0.15
+        b = 0.004
+        r = 0.005
+        speed_ps = 0.001
+        pidx_lst = []
+        bal_pts_lst = [make_cw(self.orig_pts)]
+        com_lst = [self.com]
+        bal_com_lst = [self.com]
+        bal_com_orig_lst = [self.com]
+        inter_lst = [self.com]
+        bal_edges = []
 
+        cofs_set()
+        #####################
+        #  GETTING STANCES  #
+        #####################
 
-    # def plot(self):
-        # n_opt = 1
-        # move_com = False
-        # # move_com = True
+        com_off_sum = -self.com_off.copy()
+        
+        while n_st < targetg_n_st:
+            en = self.optimize(1)
 
-        # cofs_set()
-        # INC = 0.01
-        # orig_pos = self.pts[self.pidx].copy()
-        # com = self.com.copy()
-        # heatmap = np.zeros((64, 64), dtype=float)
-        # for i, y in enumerate(range(heatmap.shape[0] // 2 - heatmap.shape[0], heatmap.shape[0] // 2)):
-            # for j, x in enumerate(range(heatmap.shape[1] // 2 - heatmap.shape[1], heatmap.shape[1] // 2)):
-                # if move_com:
-                    # self.com = com + INC * np.array([x, y])
-                # else:
-                    # self.pts[self.pidx] = orig_pos + INC * np.array([x, y])
+            com_off_sum = com_off_sum - en.com_off
+            pts = en.pts - com_off_sum
+            com = en.com - com_off_sum
+            
+            bal_pts = np.array([p for i, p in enumerate(pts) if i != en.pidx])
+            bal_com = centroid_of_polygon(bal_pts)
 
-                # heatmap[i, j] = self.eval_wrap()
+            pidx_lst.append(en.pidx)
+            bal_edges.append(np.array([
+                pts[cw_seq[(cw_seq[en.pidx] - 1) % 4]],
+                pts[cw_seq[(cw_seq[en.pidx] + 1) % 4]]]))
+            bal_pts_lst.append(bal_pts)
+            bal_com_orig_lst.append(bal_com)
+            bal_com_lst.append(bal_com)
+            com_lst.append(com)
+            n_st += 1
 
-        # c = plt.imshow(heatmap.T, cmap="hot", interpolation="nearest")
-        # plt.colorbar(c)
+        ############################
+        #  REARANGING BALANCE PTS  #
+        ############################
+        
+        for i in range(len(com_lst) - 2):
+            nxt_closer = np.linalg.norm(bal_com_lst[i] - bal_com_lst[i+2]) < np.linalg.norm(bal_com_lst[i] - bal_com_lst[i+1])
+            ins1 = is_inside2(bal_com_lst[i+1], *bal_pts_lst[i+2], r) 
+            ins2 = is_inside2(bal_com_lst[i+2], *bal_pts_lst[i+1], r) 
+            print(f"swap if nxt_cl:{nxt_closer} ins1:{ins1} ins2:{ins2}")
+            if nxt_closer and ins1 and ins2:
+                print(f"swaping bal coms")
+                # swaping last 2 balance coms
+                bal_com_lst[i+1], bal_com_lst[i+2] = bal_com_lst[i+2], bal_com_lst[i+1]
 
-        # # print(guess_start_pos(self.def_pts[self.pidx], self.direction, self.ell_a, self.ell_b, 4))
-        # self.pts[self.pidx] = orig_pos
-        # paths, losses = self.optimize(
-            # self.pts, self.def_pts, self.pidx, self.direction, self.ell_a, self.ell_b)
+        # balance triangle then we skip it
+        if is_inside2(self.com, *bal_pts_lst[1], r):
+            print(f"Skiping first stance for being in same bal triangle {bal_com_lst[1]}")
+            bal_com_lst.pop(1)
+            bal_pts_lst.pop(1)
+            bal_edges.pop(1)
 
-        # min_x = 0
-        # min_y = 0
-        # min_val = 1000.0
-        # for y in range(heatmap.shape[0]):
-            # for x in range(heatmap.shape[1]):
-                # if heatmap[y, x] < min_val:
-                    # min_x = x
-                    # min_y = y
-                    # min_val = heatmap[y, x]
+        ######################
+        #  INTERMEDIATE PTS  #
+        ######################
+        
+        for i in range(len(bal_com_lst) - 1):
+            ins1 = is_inside2(bal_com_lst[i], *bal_pts_lst[i+1], r) 
+            # ins2 = is_inside2(bal_com_lst[i+1], *bal_pts_lst[i], r) 
+            ins2 = len(bal_pts_lst[i]) == 3 and is_inside2(bal_com_lst[i+1], *bal_pts_lst[i], r) 
+            print(f"ins1:{ins1} ins2:{ins2} len:{len(bal_pts_lst[i])}")
 
-        # if move_com:
-            # dp_mod = self.def_pts
-            # op_mod = self.orig_pts
-        # else:
-            # dp_mod = self.def_pts - orig_pos
-            # op_mod = self.orig_pts - orig_pos
+            if not ins1:
+                print(f"cross bal tri:{bal_pts_lst[i+1]} coms:{bal_com_lst[i]}:{bal_com_lst[i+1]}")
+                perim = bal_pts_lst[i+1]
+            elif ins1 and not ins2:
+                print(f"same bal tri:{bal_pts_lst[i+1]} coms:{bal_com_lst[i]}:{bal_com_lst[i]}")
+                perim = bal_pts_lst[i]
 
-        # plot_path = np.array(
-            # [(i - orig_pos) / INC + np.array(heatmap.shape, dtype=float) / 2 for i in paths])
-        # # print(f"plot_path:{plot_path}")
-        # # print(f"losses:{losses}")
+            incl, x, y = sect_triangle_intersect(bal_com_lst[i], bal_com_lst[i+1], perim, k, b)
+            if not incl:
+                print("ERR not intersect")
+            else:
+                print(f"Got intersect x:{x} y:{y}")
+                inter_lst.append(np.array([x, y]))
 
-        # seg_len = len(plot_path[0])
-        # paths_lst = [[[], []] for _ in range(seg_len)]
-        # losses_lst = [[] for _ in range(seg_len)]
-        # for j, seg in enumerate(plot_path):
-            # for i in range(seg_len):
-                # paths_lst[i][0].append(seg[i][0])
-                # paths_lst[i][1].append(seg[i][1])
+        ############
+        #  SPLINE  #
+        ############
+        
+        pts = DestPoint.dest_pts_lst(bal_com_lst)
+        prep_pts = prepare_traversing_points(pts[0], pts[1:], speed_ps) 
+        # set initial direction
+        prep_pts[0].set_vel((prep_pts[1].pos - prep_pts[0].pos) / 100.0)
+        fill_diffs(prep_pts)
+        steps = plan_steps(prep_pts, gradual_speed_func)
+        steps.reverse()
+        step_pos_arr = np.array([s.pos for s in steps])
 
-        # for j, ls in enumerate(losses):
-            # for i in range(seg_len):
-                # losses_lst[i].append(ls[i])
+        pts = DestPoint.dest_pts_lst(inter_lst)
+        prep_pts = prepare_traversing_points(pts[0], pts[1:], speed_ps) 
+        # set initial direction
+        if len(prep_pts) >= 2:
+            prep_pts[0].set_vel((prep_pts[1].pos - prep_pts[0].pos) / 10.0)
+        fill_diffs(prep_pts)
+        steps = plan_steps(prep_pts, variable_speed_func)
+        steps.reverse()
+        inter_step_pos_arr = np.array([s.pos for s in steps])
 
-        # min_losses = np.array([np.min(np.array(l)) for l in losses_lst])
-        # min_idx = [i for i, j in enumerate(min_losses) if j == np.min(min_losses)][0]
-        # # print(f"paths_lst:{paths_lst}")
-        # # print(f"losses_lst:{losses_lst}")
-        # # print()
+        last_replan_idx = 0
+        replan_idx = 0
+        act = FSMState.PENDING
+        lo, hi = line_pts_intersect_r2(bal_edges[0][0], bal_edges[0][1], inter_step_pos_arr, last_replan_idx, r) 
 
-        # plt.scatter(dp_mod[:, 1] / INC + heatmap.shape[0] / 2,
-                    # dp_mod[:, 0] / INC + heatmap.shape[1] / 2, color="blue", label="default")
-        # plt.scatter(op_mod[:, 1] / INC + heatmap.shape[0] / 2,
-                    # op_mod[:, 0] / INC + heatmap.shape[1] / 2, color="green", label="original")
-        # plt.scatter(min_y, min_x, color="red",
-                    # label=f"min IT:{round(min_val, 4)}")
+        if lo > 0:
+            replan_idx = lo
+            act = FSMState.ASCENDING
+        elif hi > 0:
+            replan_idx = hi
+            act = FSMState.TRAVERSING
 
-        # plt.scatter(paths_lst[min_idx][1][-1], paths_lst[min_idx][0][-1], color="orange",
-                    # label=f"min GD:{round(min_losses[min_idx], 4)}")
-        # for i, pth in enumerate(paths_lst):
-            # plt.plot(pth[1], pth[0], label="_nolegend_")
-                     # # label=f"path:{i}:{round(min_losses[i], 4)}")
+        #############
+        #  PLOTING  #
+        #############
 
-        # plt.legend()
-        # plt.savefig(f"{SAVE_DIR}/{datetime.now()}.png")
-        # plt.show()
+        for i, bps in enumerate(bal_pts_lst):
+            bps = bps.tolist()
+            bps.append(bps[0])
+            bps = np.array(bps)
+            plt.plot(bps[:, 1], bps[:, 0], label=f"st{i}", marker="o")
+            # plt.scatter(bps[:, 1], bps[:, 0], color="green", label="_nolegend_")
 
-        # # for l in losses_lst:
-            # # plt.plot(l)
-        # # plt.show()
+        plt.plot([c[1] for  c in com_lst], [c[0] for  c in com_lst], color="black", label="_nolegend_", marker="o")
+        plt.plot([c[1] for  c in bal_com_orig_lst], [c[0] for  c in bal_com_orig_lst], color="blue", label="_nolegend_", marker="o")
+        plt.plot([c[1] for  c in bal_com_lst], [c[0] for  c in bal_com_lst], color="red", label="_nolegend_", marker="o")
+        plt.plot([c[1] for  c in inter_lst], [c[0] for  c in inter_lst], color="magenta", label="_nolegend_", marker="o")
+        plt.plot(step_pos_arr[:, 1], step_pos_arr[:, 0], color="green", label="_nolegend_")
+        plt.plot(inter_step_pos_arr[:, 1], inter_step_pos_arr[:, 0], color="black", label="_nolegend_")
+        plt.plot(inter_step_pos_arr[:, 1], inter_step_pos_arr[:, 0], color="black", label="_nolegend_")
+        plt.plot(inter_step_pos_arr[:replan_idx + 1, 1], inter_step_pos_arr[:replan_idx + 1, 0], color="white", linestyle="dotted", label="_nolegend_")
+
+        for e in bal_edges:
+            plt.plot(e[:, 1], e[:, 0], color="black", label="_nolegend_", linestyle="dashed", linewidth=2)
+
+        plt.scatter(inter_step_pos_arr[replan_idx][1], inter_step_pos_arr[replan_idx][0], color="green", label="_nolegend_", marker="*")
+
+        plt.gca().invert_yaxis()
+        plt.axis("equal")
+        plt.legend()
+        plt.title(f"{datetime.now()}_stance_map")
+        plt.grid(True, "both")
+        plt.savefig(f"{SAVE_DIR}/{datetime.now()}_stance_map.png")
+        plt.show()
+
+        ret_lst = steps[:replan_idx + 1]
+        ret_lst.reverse() # switching back to reversed order
+
+        return act, ret_lst
+
+    
 
     def eval_com_move_dir(self):
         R = max(self.ell_a, self.ell_b)
         d = strech_vector_to(self.direction, R)
         # avg_pos_diff = np.sum(self.pts, axis=0)
+
+        # WTF
         com_pos_diff = self.com - self.com
 
         # apd_vec = strech_vector_to(d, vector_projection(avg_pos_diff, d))

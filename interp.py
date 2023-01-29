@@ -8,33 +8,6 @@ def drop_time(h):
     return abs(h - MAX_DIP) / ((0.25 * T_RAD) / MIN_PERIOD) + MIN_PERIOD
 
 
-def fill_diffs(lst):
-    time_steps = np.array([float(ts_to_t(i.ts)) for i in lst])
-    data_x = np.array([float(i.pos[0]) for i in lst])
-    data_y = np.array([float(i.pos[1]) for i in lst])
-    data_z = np.array([float(i.pos[2]) for i in lst])
-
-    dx = akima(time_steps, data_x)
-    dy = akima(time_steps, data_y)
-    dz = akima(time_steps, data_z)
-
-    for i in range(len(lst)):
-        vel = np.copy(lst[i].vel)
-        if np.isnan(lst[i].vel[0]):
-            vel[0] = dx[i]
-            # lst[i].vel[0] = dx[i]
-
-        if np.isnan(lst[i].vel[1]):
-            vel[1] = dy[i]
-            # lst[i].vel[1] = dy[i]
-
-        if np.isnan(lst[i].vel[2]):
-            vel[2] = dz[i]
-            # lst[i].vel[2] = dz[i]
-
-        lst[i].set_vel(vel)
-
-
 def get_d2_speed(d1, d2):
     S = np.linalg.norm(d2.pos - d1.pos)
     n_step = d2.ts - d1.ts
@@ -115,12 +88,11 @@ def ellipse_line_intersect(a, b, k, c):
 
 @njit
 def line_cof(x1, y1, x2, y2):
-    fi = 0.0
-    if x2 == x1:
-        fi = 0.0000001
+    fi = 0.0000001
 
     k = (y2 - y1) / (x2 - x1 + fi)
     b = y1 - k * x1
+    k = k if k != 0 else fi
     return k, b
 
 
@@ -147,6 +119,23 @@ def sect_intersect(x11, y11, x12, y12, x21, y21, x22, y22):
         min(y11, y12) < y < max(y11, y12) and \
         min(y21, y22) < y < max(y21, y22)
     return incl, x, y
+
+
+def sect_intersect2(p11, p12, p21, p22):
+    return sect_intersect(p11[0], p11[1], p12[0], p12[1], p21[0], p21[1], p22[0], p22[1])
+
+
+def sect_triangle_intersect(p1, p2, t, k=0.0, b=0.0):
+    for i in range(3):
+        incl, x, y = sect_intersect2(p1, p2, t[i-1], t[i])
+        if incl:
+            p_incl = np.array([x, y])
+            p_end = p2 - p_incl
+            dr = strech_vector_to(p_end, k * np.linalg.norm(p_end) + b)
+            p = p_incl + dr
+            return incl, p[0], p[1]
+
+    return False, 0, 0
 
 
 def dist(x1, y1, x2, y2):
@@ -409,6 +398,12 @@ def get_4x4_from_3x3_mat(arr: np.ndarray):
     return n_arr
 
 
+def get_3_from_2_arr(arr: np.ndarray):
+    new_arr = np.zeros(3)
+    new_arr[:2] = arr[:2]
+    return new_arr
+
+
 @njit
 def get_2x2_rotation_matrix_from_angle(phi):
     matrix = np.zeros((2, 2), dtype=float)
@@ -430,7 +425,8 @@ def strech_vector_to(v: np.ndarray, lenght):
     if lv != 0:
         return v * (lenght / lv)
     else:
-        return np.array([0.0, 0.0, 0.0])
+        return np.zeros(v.shape, dtype=float)
+        # return np.array([0.0, 0.0, 0.0])
 
 
 @njit
@@ -489,6 +485,16 @@ def is_inside(p, a, b, c):
     A3 = area(p, a, b)
 
     return (round(A, 5) == round(A1 + A2 + A3, 5))
+
+
+@njit
+def is_inside2(p, a, b, c, r):
+    if not is_inside(p, a, b, c):
+        return False
+
+    return point_to_line2(p, a, b) >= r and \
+        point_to_line2(p, b, c) >= r and \
+        point_to_line2(p, a, c) >= r
 
 
 @njit

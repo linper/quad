@@ -149,16 +149,30 @@ class Leg:
                                 # force=self.stiffness_c * (1-(damp_state[0] / self.damp_len)))
                                 force=self.stiffness_c * (damp_state[0] / self.damp_len))
 
-    # def make_plan(self, pts: list, state: FSMState, speed_func=do_nothing, est_n_steps: int = -1):
     def make_plan(self, pts: list, state: FSMState, speed_func=do_nothing):
         self.fsm.reset()
         self.plan.reset()
         self.plan.speed_func = speed_func
-        # self.plan.est_n_steps = est_n_steps
         self.plan.raw_points = pts
         self.plan.target = pts[-1]
 
         self.fsm.set(state)
-        # self.fsm.execute()
+
+        return
+
+    def make_plan2(self, steps: list, state: FSMState):
+        for s in steps:
+            s.pos = s.pos + self.position
+
+        p = self.plan
+        fsm = self.fsm
+
+        fsm.reset()
+        p.reset()
+        p.steps = steps
+        p.need_plan = False
+        p.target = steps[-1]
+
+        fsm.set(state)
 
         return

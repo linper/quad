@@ -6,8 +6,8 @@ import math
 import functools
 from stance import Stance
 from enum import IntEnum
-from interp import gradual_speed_func, variable_speed_func, do_nothing, get_cross_product, map_ranges, get_mv_dot_product, strech_vector_to
-from plan import DestPoint
+from interp import gradual_speed_func, variable_speed_func, do_nothing, get_cross_product, map_ranges, get_mv_dot_product, strech_vector_to, get_3_from_2_arr
+from plan import DestPoint, prepare_pending_points, prepare_ascending_points, prepare_traversing_points
 # from ground_view import SPoint
 from fsm import FSMState, FSMAction, FSM
 import matplotlib.pyplot as plt
@@ -304,14 +304,6 @@ class Quad:
     def get_view(self):
         return QuadView(self)
 
-    def get_path_len(self, task) -> float:
-        pos_lst = [self.legs[task.idx].plan.targt.pos]
-        pos_lst.extend([p.pos for p in task.points])
-        pos_difs = [np.linalg.norm(p1 - p0)
-                    for p0, p1 in zip(pos_lst[:-1], pos_lst[1:])]
-        S = np.sum(np.array(pos_difs))
-        return S
-
     def get_task_act(self, task):
         l = self.legs[task.idx]
         if len(task.points) == 0:
@@ -331,66 +323,10 @@ class Quad:
 
         return act
 
-    def prepare_pending_points(self, task):
-        l = self.legs[task.idx]
-        pts = [DestPoint(np.copy(l.plan.target.pos), f_arr_unset(),
-                         ts=0, vel_ps=0.0)]
-        return pts
-
-    def prepare_ascending_points(self, task, n_steps):
-        pts = [DestPoint(task.points[-1].pos, f_arr_unset(),
-                         ts=n_steps)]
-        return pts
-
-    def prepare_traversing_points(self, task, speed_ps: float):
-        if task.idx == -1:
-            l = self.dummy_leg
-        else:
-            l = self.legs[task.idx]
-
-        # Getting positions of every path point
-        pos_lst = [l.plan.target.pos]
-        pos_lst.extend([p.pos for p in task.points])
-
-        # Getting lengths of every path interval
-        pos_difs = [0.0] + [np.linalg.norm(p1 - p0)
-                            for p0, p1 in zip(pos_lst[:-1], pos_lst[1:])]
-        # S = np.sum(np.array(pos_difs))
-
-        # Aggregating lengths of every path point
-        pos_dif_agr = []
-        pos_dif_agr_last = 0.0
-        for pd in pos_difs:
-            pos_dif_agr.append(pos_dif_agr_last + pd)
-            pos_dif_agr_last = pos_dif_agr[-1]
-
-        # Getting velocities of every path point
-        vels = map_ranges(
-            pos_dif_agr, pos_dif_agr[0], pos_dif_agr[-1], l.plan.target.vel_ps, speed_ps, default=speed_ps)
-        # Getting number of steps of every path point
-        n_steps_unrounded = [
-            2 * s / (v0 + v1) for s, v0, v1 in zip(pos_difs[1:], vels[:-1], vels[1:])]
-
-        # n_steps_unrounded = [2 * s / (v0 + v1) for s, v0, v1 in zip(pos_difs, np.array([l.plan.target.vel_ps] + list(vels[:-1])), vels) ]
-        # Aggregating number of steps of every path point
-        n_steps_unr_agr = []
-        n_steps_unr_agr_last = 0.0
-        for s in n_steps_unrounded:
-            n_steps_unr_agr.append(n_steps_unr_agr_last + s)
-            n_steps_unr_agr_last = n_steps_unr_agr[-1]
-
-        # Rounding aggregated number of steps of every path point
-        n_steps_rounded_agr = [round(s) for s in n_steps_unr_agr]
-
-        # Getting DestPoint of every path point
-        pts = [DestPoint(p, f_arr_unset(), ts=s, vel_ps=vps)
-               for p, s, vps in zip(pos_lst[1:], n_steps_rounded_agr, vels[1:])]
-
-        return pts
-
     def set_target(self, cmd):
         tasks = cmd.tasks
         speed_ps = 0.001
+        n_opt_stances = 4
 
         com_task = cmd.tasks[0]
 
@@ -401,7 +337,34 @@ class Quad:
             l_def_pos = np.array([l.def_pos[:2] for l in self.legs])
             st = Stance(l_pos, l_def_pos, com_task.direction,
                         com_target)
-            st.plot()
+            # act, steps = st.plot()
+            act, steps = st.get_movement(n_opt_stances)
+
+            for l in self.legs:
+                if act == FSMState.PENDING:
+                    print(f"STANCE TEST: PENDING")
+                    pts = prepare_pending_points(l.plan.target)
+                    l.make_plan(pts, act, do_nothing)
+
+                elif act == FSMState.ASCENDING and l.idx == st.next.pidx:
+                    print(f"STANCE TEST: ASCENDING")
+                    print(f"LEG POS:{l.position}")
+                    print(f"P0:{st.pts[st.next.pidx]}")
+                    print(f"P1:{st.next.pts[st.next.pidx]}")
+                    ap = st.next.pts[st.next.pidx]
+                    pts = prepare_ascending_points(
+                        np.array([ap[0], ap[1], l.position[2]]), len(steps))
+                    l.make_plan(pts, FSMState.ASCENDING, variable_speed_func)
+
+                elif act in [FSMState.TRAVERSING, FSMState.ASCENDING]:
+                    print(f"STANCE TEST: TRAVERSING")
+                    print(f"LEG POS:{l.position}")
+                    print(f"P0:{steps[0].pos}")
+                    print(f"P1:{steps[-1].pos}")
+                    steps_cl = [s.clone() for s in steps]
+                    l.make_plan2(steps_cl, FSMState.TRAVERSING)
+
+            return
 
         for t in tasks:
             if t.idx == -1:
@@ -427,17 +390,23 @@ class Quad:
             match act:
                 case FSMState.PENDING:
                     speed_func = do_nothing
-                    pts = self.prepare_pending_points(t)
+                    # pts = self.prepare_pending_points(t)
+                    pts = prepare_pending_points(self.legs[t.idx].plan.target)
 
                 case FSMState.ASCENDING:
                     # est_n_steps = 500
                     # est_n_steps = 10
                     est_n_steps = 100
                     speed_func = variable_speed_func
-                    pts = self.prepare_ascending_points(t, est_n_steps)
+                    pts = prepare_ascending_points(
+                        t.points[-1].pos, est_n_steps)
 
                 case FSMState.TRAVERSING:
                     speed_func = gradual_speed_func
-                    pts = self.prepare_traversing_points(t, speed_ps)
+                    l = self.dummy_leg if t.idx == -1 else self.legs[t.idx]
+                    pts = prepare_traversing_points(
+                        l.plan.target, t.points, speed_ps)
+                    pts = pts[1:]
+                    # pts = self.prepare_traversing_points(t, speed_ps)
 
             l.make_plan(pts, act, speed_func)
