@@ -14,7 +14,7 @@
 #include <stdbool.h>
 #include <math.h>
 
-#include "math_stuff.h"
+#include "mth.h"
 #include "matrix.h"
 
 mat_t *create_matrix(uint8_t m, uint8_t n, bool zero)

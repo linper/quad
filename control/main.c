@@ -14,14 +14,14 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <signal.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #include <readline/readline.h>
 #include <readline/history.h>
-/*#include <json-c/json.h>*/
 
 #include "log.h"
-#include "math_stuff.h"
+#include "mth.h"
 #include "model.h"
 
 #define EMPTY_DATA "empty"
@@ -31,7 +31,13 @@
 #define SENS_REQ "{\"act\": \"sens\", \"data\": \"empty\"}\n"
 
 #define SOCK_PATH "/tmp/pe_sock"
-#define SOCK_BUFF_LEN 2048
+#define READ_BUF_LEN 2048
+
+#define VC_PATH "/tmp/view_ctl_pipe"
+#define SC_PATH "/tmp/sim_ctl_pipe"
+#define CS_PATH "/tmp/ctl_sim_pipe"
+
+static int vc_fd, sc_fd, cs_fd;
 
 /**
  * @brief strip whitespace from the start and end of string.
@@ -62,48 +68,48 @@ static char *stripwhite(char *string)
  * @param[in] 		sock	Socket 
  * @return 0 on sucess, 1 - otherwise.
  */
-static int make_request(char *buf, int sock)
+static int make_request(char *buf)
 {
 	int ret;
 	DBG("Sent: %s", buf);
 	/*HEX(buf, strlen(buf));*/
 
-	if (write(sock, buf, strlen(buf)) == -1) {
+	if (write(cs_fd, buf, strlen(buf)) == -1) {
 		ERR(NLS, strerror(errno));
 		return 1;
 	}
 
 	buf[0] = 0;
 
-	ret = read(sock, buf, SOCK_BUFF_LEN);
+	ret = read(sc_fd, buf, READ_BUF_LEN);
 	if (ret == -1) {
 		ERR(NLS, strerror(errno));
 		return 1;
 	}
 
-	buf[MIN(SOCK_BUFF_LEN - 1, (uint)ret)] = 0;
+	buf[MIN(READ_BUF_LEN - 1, (uint)ret)] = 0;
 
 	DBG("Result: %s\n", buf);
 
 	return 0;
 }
 
-static int make_model_request(char *buf, int sock)
+static int make_model_request(char *buf)
 {
 	strcpy(buf, MODEL_REQ);
-	return make_request(buf, sock);
+	return make_request(buf);
 }
 
-static int make_sens_request(char *buf, int sock)
+static int make_sens_request(char *buf)
 {
 	strcpy(buf, SENS_REQ);
-	return make_request(buf, sock);
+	return make_request(buf);
 }
 
-static int make_setup_request(char *buf, int sock)
+static int make_setup_request(char *buf)
 {
 	strcpy(buf, SETUP_REQ);
-	return make_request(buf, sock);
+	return make_request(buf);
 }
 
 /**
@@ -111,7 +117,7 @@ static int make_setup_request(char *buf, int sock)
  * @param[in] sock 		Socket to communicate with `sim`
  * @return 0 on succes, 1 otherqise.
  */
-static void interactive_loop(char *buf, int sock)
+static void interactive_loop(char *buf)
 {
 	char *line_act, *line_data, *s_act, *s_data;
 
@@ -151,7 +157,7 @@ static void interactive_loop(char *buf, int sock)
 		free(line_act);
 		free(line_data);
 
-		if (make_request(buf, sock)) {
+		if (make_request(buf)) {
 			ERR("Failed to request\n");
 			continue;
 		}
@@ -162,16 +168,16 @@ static void interactive_loop(char *buf, int sock)
 	}
 }
 
-static int start_sim(char *buf, int sock)
+static int start_sim(char *buf)
 {
 	DBG("SETTING UP...\n");
-	if (make_setup_request(buf, sock)) {
+	if (make_setup_request(buf)) {
 		ERR("Setting up failed\n");
 		return 1;
 	}
 
 	DBG("GETTING MODEL...\n");
-	if (make_model_request(buf, sock)) {
+	if (make_model_request(buf)) {
 		ERR("Geting model failed\n");
 		return 1;
 	}
@@ -187,7 +193,7 @@ static int start_sim(char *buf, int sock)
 	}
 
 	DBG("GETTING SENS...\n");
-	if (make_sens_request(buf, sock)) {
+	if (make_sens_request(buf)) {
 		ERR("Getting sensor info failed\n");
 		return 1;
 	}
@@ -208,31 +214,53 @@ static int start_sim(char *buf, int sock)
 
 int main(int argc, char *argv[])
 {
-	int ret, sock;
-	char buf[SOCK_BUFF_LEN];
-	struct sockaddr_un addr = {
-		.sun_family = AF_UNIX,
-		.sun_path = SOCK_PATH,
-	};
+	char buf[READ_BUF_LEN];
 
 	/*start_sim(buf, 0); // test*/
 
-	sock = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (sock == -1) {
+	// CONTROL TO SIM PIPE
+	if (access(CS_PATH, F_OK)) {
+		mkfifo(CS_PATH, 0666);
 	}
 
-	ret = connect(sock, (const struct sockaddr *)&addr, sizeof(addr));
-	if (ret == -1) {
+	cs_fd = open(CS_PATH, O_RDWR);
+	/*cs_fd = open(CS_PATH, O_WRONLY | O_NONBLOCK);*/
+	if (cs_fd == -1) {
 		FATAL(NLS, strerror(errno));
 	}
 
-	if (argc == 2 && !strcmp(argv[1], "start_sim") && start_sim(buf, sock)) {
+	// SIM TO CONTROL PIPE
+	if (access(SC_PATH, F_OK)) {
+		mkfifo(SC_PATH, 0666);
+	}
+
+	sc_fd = open(SC_PATH, O_RDONLY);
+	/*sc_fd = open(SC_PATH, O_RDONLY | O_NONBLOCK);*/
+	if (sc_fd == -1) {
+		FATAL(NLS, strerror(errno));
+	}
+
+	// VIEW TO CONTROL PIPE
+	if (access(VC_PATH, F_OK)) {
+		mkfifo(VC_PATH, 0666);
+	}
+
+	/*vc_fd = open(VC_PATH, O_RDONLY | O_NONBLOCK);*/
+	/* TODO: implement SIGIO handling (inf O_ASYNC is used) <08-02-23, yourname> */
+	vc_fd = open(VC_PATH, O_RDONLY | O_NONBLOCK | O_ASYNC);
+	if (vc_fd == -1) {
+		FATAL(NLS, strerror(errno));
+	}
+
+	if (argc == 2 && !strcmp(argv[1], "start_sim") && start_sim(buf)) {
 		ERR("Failed to start simulationi\n");
 	}
 
-	interactive_loop(buf, sock);
+	interactive_loop(buf);
 
-	close(sock);
+	close(cs_fd);
+	close(sc_fd);
+	close(vc_fd);
 
 	exit(EXIT_SUCCESS);
 }

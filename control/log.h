@@ -18,6 +18,12 @@
 #define NLD "%s\n"
 #define NLU "%s\n"
 
+#define HIT                                                                    \
+	do {                                                                       \
+		fprintf(stdout, "HIT %s:%d\n", __func__, __LINE__);                    \
+		fflush(stdout);                                                        \
+	} while (0);
+
 #define DBG(fmt, args...)                                                      \
 	do {                                                                       \
 		fprintf(stdout, "%s[%d]: " fmt, __func__, __LINE__, ##args);           \

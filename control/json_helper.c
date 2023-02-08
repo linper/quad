@@ -6,7 +6,7 @@
  */
 #include <stdlib.h>
 
-#include "math_stuff.h"
+#include "mth.h"
 #include "json_helper.h"
 
 #define OP_TBL '{'

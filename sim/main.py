@@ -3,17 +3,17 @@ import json
 import time
 import numpy as np
 import os
-from socketserver import UnixStreamServer, StreamRequestHandler, ThreadingMixIn
-import socket
 from data_models import Quad, Leg
 from consts import T_RAD
 
-PE_SOCK = "/tmp/pe_sock"
 SIM_VIEW_PIPE = "/tmp/sim_view_pipe"
 SIM_CTL_PIPE = "/tmp/sim_ctl_pipe"
 CTL_SIM_PIPE = "/tmp/ctl_sim_pipe"
 
-run_server = True
+sv_pp = None
+sc_pp = None
+cs_pp = None
+
 q = None
 # signed directions
 FRONT_DIR_LEFT = [1, -1, -1]
@@ -171,11 +171,11 @@ PARSE_FAIL = json.dumps({"status": "error",  "msg": "Failed to parse"})
 NOT_SUPPORTED = json.dumps({"status": "error",  "msg": "Unsupported action"})
 
 
-def api_setup(req, data):
+def api_setup(data):
     global q
 
     if q is not None:
-        req.request.sendall(bytes(ALREADY_RUNNING, "utf-8"))
+        os.write(sc_pp, bytes(ALREADY_RUNNING, "utf-8"))
         return
 
     connect_pe()
@@ -183,17 +183,17 @@ def api_setup(req, data):
     m = load_robot()
     q = build_model(m)
 
-    req.request.sendall(bytes(RES_OK, "utf-8"))
+    os.write(sc_pp, bytes(RES_OK, "utf-8"))
 
 
-def api_stop(req, data):
-    req.request.sendall(b"exit")
+def api_stop(data):
+    os.write(sc_pp, b"exit")
     quit(0)
 
 
-def api_step(req, data):
+def api_step(data):
     if q is None:
-        req.request.sendall(bytes(NO_MODEL, "utf-8"))
+        os.write(sc_pp, bytes(NO_MODEL, "utf-8"))
         return
 
     try:
@@ -206,66 +206,87 @@ def api_step(req, data):
             q.sens_info.update()
             update_joints(parsed_array)
 
-            req.request.sendall(
-                bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
+            os.write(sc_pp,
+                     bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
             return
-    except Exception as e:
-        req.request.sendall(bytes(NO_DATA, "utf-8"))
+    except:
+        os.write(sc_pp, bytes(NO_DATA, "utf-8"))
 
     return
 
 
-def api_echo(req, data):
+def api_echo(data):
     if data is None:
-        req.request.sendall(bytes(NO_DATA, "utf-8"))
+        os.write(sc_pp, bytes(NO_DATA, "utf-8"))
         return
 
-    req.request.sendall(bytes(data, "utf-8"))
+    os.write(sc_pp, bytes(data, "utf-8"))
     return
 
 
-def api_model(req, data):
+def api_model(data):
     if q is None:
-        req.request.sendall(bytes(NO_MODEL, "utf-8"))
+        os.write(sc_pp, bytes(NO_MODEL, "utf-8"))
         return
 
-    req.request.sendall(bytes(json.dumps(q.get_json()), "utf-8"))
+    os.write(sc_pp, bytes(json.dumps(q.get_json()), "utf-8"))
 
 
-def api_sensors(req, data):
+def api_sensors(data):
     if q is None:
-        req.request.sendall(bytes(NO_MODEL, "utf-8"))
+        os.write(sc_pp, bytes(NO_MODEL, "utf-8"))
         return
 
-    req.request.sendall(bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
+    os.write(sc_pp, bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
 
 
-class ComHandler(StreamRequestHandler):
-    def handle(self):
+def listen_ctl():
+    global sc_pp, cs_pp, sv_pp
+
+    try:
+        os.mkfifo(SIM_CTL_PIPE)
+    except:
+        pass
+    try:
+        os.mkfifo(CTL_SIM_PIPE)
+    except:
+        pass
+    try:
+        os.mkfifo(SIM_VIEW_PIPE)
+    except:
+        pass
+
+    sc_pp = os.open(SIM_CTL_PIPE, os.O_RDWR)
+    sv_pp = os.open(SIM_VIEW_PIPE, os.O_RDWR)
+
+    while True:
+        cs_pp = os.open(CTL_SIM_PIPE, os.O_RDONLY)
         while True:
-            msg = self.rfile.readline().strip()
-            if not msg:
-                return
+            b_msg = os.read(cs_pp, 2048)
+            if len(b_msg) == 0:  # Writter closed
+                break
 
-            msg = msg.decode("utf-8")
+            msg = b_msg.decode("utf-8")
             print(f"Recieved {msg}")
             # print(f"HEX{':'.join('{: 02x}'.format(ord(c)) for c in msg)}")
             try:
                 json_msg = json.loads(msg)
-            except Exception as e:
-                self.request.sendall(
-                    bytes(PARSE_FAIL, "utf-8"))
-                break
+            except:
+                print("Writting failed to parse message")
+                os.write(sc_pp, bytes(PARSE_FAIL, "utf-8"))
+                print("Written failed to parse message")
+                continue
 
             data = json_msg.get("data")
             act_str = json_msg.get("act")
             act = actions.get(act_str)
             if act is not None:
                 print(f"executing:{act_str}")
-                act(self, data)
+                act(data)
             else:
-                self.request.sendall(
-                    bytes(NOT_SUPPORTED, "utf-8"))
+                os.write(sc_pp, bytes(NOT_SUPPORTED, "utf-8"))
+
+        os.close(cs_pp)
 
 
 actions = {
@@ -279,11 +300,12 @@ actions = {
 
 
 if __name__ == "__main__":
-    try:
-        os.unlink(PE_SOCK)
-    except Exception as e:
-        print(e)
+    listen_ctl()
+    # try:
+    # os.unlink(PE_SOCK)
+    # except Exception as e:
+    # print(e)
 
-    with UnixStreamServer(PE_SOCK, ComHandler) as server:
-        server.serve_forever()
+    # with UnixStreamServer(PE_SOCK, ComHandler) as server:
+    # server.serve_forever()
     # main()

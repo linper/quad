@@ -1,35 +1,42 @@
-import socket
+# import socket
 import json
 import readline
+import os
 
 
-SOCK = "/tmp/pe_sock"
+# SIM_VIEW_PIPE = "/tmp/sim_view_pipe"
+SIM_CTL_PIPE = "/tmp/sim_ctl_pipe"
+CTL_SIM_PIPE = "/tmp/ctl_sim_pipe"
 
-with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-    sock.connect(SOCK)
-    while True:
-        print("act > ", end="")
-        act = input()
-        if act == "quit":
-            break
+fifo_out = os.open(CTL_SIM_PIPE, os.O_RDWR)
+fifo_in = os.open(SIM_CTL_PIPE, os.O_RDWR)
 
-        print("data > ", end="")
-        raw_data = input()
+while True:
+    print("act > ", end="")
+    act = input()
+    if act == "quit":
+        break
 
-        try:
-            data = json.loads(raw_data)
-        except Exception as e:
-            if raw_data:
-                data = raw_data
-            else:
-                data = "empty"
+    print("data > ", end="")
+    raw_data = input()
 
-        json_data = json.dumps({"act": act, "data": data})
-        sock.sendall(bytes(json_data + "\n", "utf-8"))
-        print("Sent:     {}".format(json_data))
+    try:
+        data = json.loads(raw_data)
+    except Exception as e:
+        if raw_data:
+            data = raw_data
+        else:
+            data = "empty"
 
-        received = str(sock.recv(1024), "utf-8")
-        print(f"Received: {received}")
+    json_data = json.dumps({"act": act, "data": data})
+    os.write(fifo_out, bytes(json_data + "\n", "utf-8"))
+    print("Sent:     {}".format(json_data))
 
-        if received == "exit":
-            break
+    received = str(os.read(fifo_in, 2048), "utf-8")
+    print(f"Received: {received}")
+
+    if received == "exit":
+        break
+
+os.close(fifo_in)
+os.close(fifo_out)
