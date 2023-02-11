@@ -5,7 +5,7 @@ OBJ = $(patsubst %.c,%.o,$(SRC))
 
 #CFLAGS = -O0
 CFLAGS = -Og -g -Werror -Wall -Wextra -Wno-unused-function
-LDFLAGS += -lreadline -lm
+LDFLAGS += -lreadline -lm -ljson-c
 
 RM = rm -f
 

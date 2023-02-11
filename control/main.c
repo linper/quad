@@ -6,6 +6,8 @@
  */
 
 #include <errno.h>
+#include <json-c/json_object.h>
+#include <json-c/json_types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -22,6 +24,7 @@
 #include "log.h"
 #include "mth.h"
 #include "model.h"
+#include "matrix.h"
 #include "ipc.h"
 
 #define CTL_VER "3.0"
@@ -33,7 +36,13 @@
 #define SENS_REQ "{\"act\": \"sens\", \"data\": \"empty\"}\n"
 #define STEP_REQ "{\"act\": \"step\", \"data\": {\"angles\": %s}}\n"
 
-#define READ_BUF_LEN 2048
+#define STEP_ACT "step"
+#define SETUP_ACT "setup"
+#define MODEL_ACT "model"
+#define SENS_ACT "sens"
+#define ACT_LABEL "act"
+#define DATA_LABEL "data"
+#define ANGLES_LABEL "angles"
 
 int quiet = 0;
 int debug = 0;
@@ -73,36 +82,58 @@ static char *stripwhite(char *string)
 	return s;
 }
 
-static int make_model_request(char *buf)
+static int make_model_request(struct json_object **j)
 {
-	strcpy(buf, MODEL_REQ);
-	return ipc_conn_request(CONN_ADDR_SIM, buf, READ_BUF_LEN);
-}
+	json_object *d;
 
-static int make_sens_request(char *buf)
-{
-	strcpy(buf, SENS_REQ);
-	return ipc_conn_request(CONN_ADDR_SIM, buf, READ_BUF_LEN);
-}
-
-static int make_setup_request(char *buf)
-{
-	strcpy(buf, SETUP_REQ);
-	return ipc_conn_request(CONN_ADDR_SIM, buf, READ_BUF_LEN);
-}
-
-static int make_step_request(char *buf)
-{
-	char *ang = mat_to_str(g_model->angles);
-	if (!ang) {
-		ERR("Failed to format 'angles'\n");
+	get_request_template(MODEL_ACT, j, &d);
+	if (!*j) {
+		ERR(ERR_ERROR);
 		return 1;
 	}
 
-	snprintf(buf, READ_BUF_LEN, STEP_REQ, ang);
-	free(ang);
+	return ipc_conn_request(CONN_ADDR_SIM, j, IPC_BUF_LEN);
+}
 
-	return ipc_conn_request(CONN_ADDR_SIM, buf, READ_BUF_LEN);
+static int make_sens_request(struct json_object **j)
+{
+	json_object *d;
+
+	get_request_template(SENS_ACT, j, &d);
+	if (!g_model || !*j) {
+		ERR(ERR_ERROR);
+		return 1;
+	}
+
+	return ipc_conn_request(CONN_ADDR_SIM, j, IPC_BUF_LEN);
+}
+
+static int make_setup_request()
+{
+	struct json_object *j, *d;
+
+	get_request_template(SETUP_ACT, &j, &d);
+	if (!j) {
+		ERR(ERR_ERROR);
+		return 1;
+	}
+
+	return ipc_conn_request(CONN_ADDR_SIM, &j, IPC_BUF_LEN);
+}
+
+static int make_step_request(struct json_object **j)
+{
+	json_object *d;
+
+	get_request_template(STEP_ACT, j, &d);
+	if (!g_model || !*j) {
+		ERR(ERR_ERROR);
+		return 1;
+	}
+
+	json_object_object_add(d, ANGLES_LABEL, mat_to_json(g_model->angles));
+
+	return ipc_conn_request(CONN_ADDR_SIM, j, IPC_BUF_LEN);
 }
 
 /**
@@ -110,112 +141,111 @@ static int make_step_request(char *buf)
  * @param[in, out] *buf 	Buffer pointer to read and write in IPC
  * @return 0 on succes, 1 otherwise.
  */
-static void interactive_loop(char *buf)
-{
-	char *line_act, *line_data, *s_act, *s_data;
+/*static void interactive_loop(char *buf)*/
+/*{*/
+/*char *line_act, *line_data, *s_act, *s_data;*/
+/*json_object *j, *d;*/
 
-	for (;;) {
-		if (!(line_act = readline("act > "))) {
-			continue;
-		}
+/*for (;;) {*/
+/*if (!(line_act = readline("act > "))) {*/
+/*continue;*/
+/*}*/
 
-		s_act = stripwhite(line_act);
+/*s_act = stripwhite(line_act);*/
 
-		if (*s_act) {
-			add_history(s_act);
-		} else {
-			s_act = EMPTY_DATA;
-		}
+/*if (*s_act) {*/
+/*add_history(s_act);*/
+/*} else {*/
+/*s_act = EMPTY_DATA;*/
+/*}*/
 
-		if (!strncmp(s_act, "quit", 4)) {
-			free(line_act);
-			break;
-		}
+/*if (!strncmp(s_act, "quit", 4)) {*/
+/*free(line_act);*/
+/*break;*/
+/*}*/
 
-		if (!(line_data = readline("data > "))) {
-			free(line_act);
-			continue;
-		}
+/*if (!(line_data = readline("data > "))) {*/
+/*free(line_act);*/
+/*continue;*/
+/*}*/
 
-		s_data = stripwhite(line_data);
+/*s_data = stripwhite(line_data);*/
 
-		if (*s_data) {
-			add_history(s_data);
-		} else {
-			s_data = EMPTY_DATA;
-		}
+/*if (*s_data) {*/
+/*add_history(s_data);*/
+/*} else {*/
+/*s_data = EMPTY_DATA;*/
+/*}*/
 
-		sprintf(buf, REQ_FMT, s_act, s_data);
+/*sprintf(buf, REQ_FMT, s_act, s_data);*/
 
-		free(line_act);
-		free(line_data);
+/*free(line_act);*/
+/*free(line_data);*/
 
-		if (ipc_conn_request(CONN_ADDR_SIM, buf, READ_BUF_LEN)) {
-			ERR("Failed to request\n");
-			continue;
-		}
+/*if (ipc_conn_request(CONN_ADDR_SIM, buf, IPC_BUF_LEN)) {*/
+/*ERR("Failed to request\n");*/
+/*continue;*/
+/*}*/
 
-		if (!strncmp(buf, "exit", 4)) {
-			break;
-		}
-	}
-}
+/*if (!strncmp(buf, "exit", 4)) {*/
+/*break;*/
+/*}*/
+/*}*/
+/*}*/
 
 /**
  * @brief This function starts `sim` and queries initial model data.
- * @param[in. out] *buf 	Buffer ptr to be used in IPC.
  * @return 0 on succes, 1 - otherwise.
  */
-static int start_sim(char *buf)
+static int start_sim()
 {
+	struct json_object *j;
+
 	DBG("SETTING UP...\n");
-	if (make_setup_request(buf)) {
-	ERR("Setting up failed\n");
-	return 1;
+	if (make_setup_request()) {
+		ERR("Setting up failed\n");
+		return 1;
 	}
 
 	DBG("GETTING MODEL...\n");
-	if (make_model_request(buf)) {
-	ERR("Geting model failed\n");
-	return 1;
+	if (make_model_request(&j)) {
+		ERR("Geting model failed\n");
+		return 1;
 	}
 
-	/*strcpy(*/
-		/*buf,*/
-		/*"{\"legs\": [{\"name\": \"front_left\", \"idx\": 0, \"pos\": [-0.125, -0.1, -0.26], \"def_pos\": [-0.125, -0.1, -0.26], \"base_off\": [-0.125, -0.05, -0.03], \"dir\": [-1, 1, -1], \"joint_lims\": [-0.5236, 0.245, -1.309, 1.309, -0.5236, -2.618]}, {\"name\": \"front_right\", \"idx\": 1, \"pos\": [-0.125, 0.1, -0.26], \"def_pos\": [-0.125, 0.1, -0.26], \"base_off\": [-0.125, 0.05, -0.03], \"dir\": [-1, 1, 1], \"joint_lims\": [-0.245, 0.5236, -1.309, 1.309, -0.5236, -2.618]}, {\"name\": \"back_left\", \"idx\": 2, \"pos\": [0.125, -0.1, -0.26], \"def_pos\": [0.125, -0.1, -0.26], \"base_off\": [0.125, -0.05, -0.03], \"dir\": [-1, 1, -1], \"joint_lims\": [-0.5236, 0.245, -1.309, 1.309, -0.5236, -2.618]}, {\"name\": \"back_right\", \"idx\": 3, \"pos\": [0.125, 0.1, -0.26], \"def_pos\": [0.125, 0.1, -0.26], \"base_off\": [0.125, 0.05, -0.03], \"dir\": [-1, 1, 1], \"joint_lims\": [-0.245, 0.5236, -1.309, 1.309, -0.5236, -2.618]}], \"base\": {\"max_dip\": -0.35, \"leg_tar_h\": -0.26, \"t_rad\": 0.012, \"cw\": [0, 1, 3, 2], \"link_len\": 0.1}}");*/
-
 	DBG("PARSING MODEL...\n");
-	if (model_from_json(buf)) {
+	if (model_from_json(j)) {
 		ERR("Parsing model failed\n");
 		return 1;
 	}
 
+	json_object_put(j);
+
 	DBG("GETTING SENS...\n");
-	if (make_sens_request(buf)) {
-	ERR("Getting sensor info failed\n");
-	return 1;
+	if (make_sens_request(&j)) {
+		ERR("Getting sensor info failed\n");
+		return 1;
 	}
 
-	/*strcpy(*/
-		/*buf,*/
-		/*"{\"avg_leg_h\": -0.26, \"touch_force\": [0, 0, 0, 0], \"damp\": [0.0, 0.0, 0.0, 0.0], \"bf_vec\": [0.0, 0.0, 0.0], \"bfo_mat\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"t_force\": {\"type\": 3, \"pos\": [0.0, 0.0, 0.0]}}");*/
-
 	DBG("PARSING SENS...\n");
-	if (set_sens_from_json(buf)) {
+	if (set_sens_from_json(j)) {
 		ERR("Parsing sens failed\n");
 		return 1;
 	}
+
+	json_object_put(j);
 
 	return 0;
 }
 
 /**
  * @brief Main execution loop of the program.
- * @param[in, out] *buf 	Buffer pointer to read and write in IPC
  * @return 0 on succes, 1 otherwise.
  */
-static int main_loop(char *buf)
+static int main_loop()
 {
+	struct json_object *j;
+
 	for (;;) {
 		// Check and handle IO
 		// Calc next step
@@ -223,7 +253,9 @@ static int main_loop(char *buf)
 		// Get angles
 		model_get_angles();
 		// Make `step` request to `sim` and save response
-		make_step_request(buf);
+		make_step_request(&j);
+		// Update sensors
+		json_object_put(j);
 	}
 
 	return 0;
@@ -231,7 +263,7 @@ static int main_loop(char *buf)
 
 int main(int argc, char *argv[])
 {
-	char buf[READ_BUF_LEN];
+	/*char buf[IPC_BUF_LEN];*/
 	int choice;
 
 	/* Argument parameters:
@@ -264,16 +296,16 @@ int main(int argc, char *argv[])
 	}
 
 	if (ipc_setup()) {
-	FATAL("Failed to setup IPC\n");
+		FATAL("Failed to setup IPC\n");
 	}
 
-	if (start_sim(buf)) {
+	if (start_sim()) {
 		FATAL("Failed to start simulationi\n");
 	}
 
-	main_loop(buf);
+	main_loop();
 
-	interactive_loop(buf);
+	/*interactive_loop(buf);*/
 
 	ipc_release();
 

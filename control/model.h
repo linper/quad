@@ -7,12 +7,14 @@
 
 #pragma once
 
+#include "json_helper.h"
 #include <stdint.h>
 #include <sys/types.h>
 
 #include "matrix.h"
 
 #define N_LEGS 4
+#define NAME_LEN 16
 
 typedef struct leg leg_t;
 
@@ -35,9 +37,9 @@ typedef struct sens {
 typedef struct leg {
 	leg_t *next; ///< 			Next non-cw leg
 	leg_t *cw_next; ///< 		Next cw leg
-	char name[16]; ///< 		Name of leg
+	char name[NAME_LEN]; ///< 	Name of leg
 	float angles[3]; ///< 		Calculated joint angles
-	u_int8_t idx; ///< 			NON-CW index of leg
+	int	 idx; ///< 				NON-CW index of leg
 	mat_t *pos; ///< 			Current position of leg (3 x 1)
 	mat_t *def_pos; ///< 		Default position of leg (3 x 1)
 	mat_t *base_off; ///< 		Shoulder offset from COM (3 x 1)
@@ -66,27 +68,27 @@ typedef struct model {
 } model_t;
 
 /**
- * @brief Allocates memory for `sens_t` struct inside `g_model` and fills it with data prpvided by json `desc`.
- * @param[in] desc 		NULL terminated model description in json format.
+ * @brief Allocates memory for `sens_t` struct inside `g_model` and fills it with data provided by `json_struct` struct .
+ * @param[in] 	*j 		`json_object` struct as data	
  * @return 0 - on success, 1 - on failure.
  */
-int set_sens_from_json(const char *desc);
+int set_sens_from_json(struct json_object *j);
 
 /**
- * @brief Overrides data inside  for `sens_t` struct in `g_model` and fills it with data prpvided by json `desc`.
- * @param[in] desc 		NULL terminated model description in json format.
+ * @brief Updates `sens_t` struct inside `g_model` and fills it with data provided by `json_struct` struct .
+ * @param[in] 	*j 		`json_object` struct as data	
  * @return 0 - on success, 1 - on failure.
  */
-int update_sens_from_json(const char *desc);
+int update_sens_from_json(struct json_object *j);
 
 /**
  * @brief Allocates memory for model and fills it with data prpvided by json `desc`.
  * Updates global `g_model` struct.
- * @param[in] desc 		NULL terminated model description in json format. This should be
+ * @param[in] 	*j 		`json_object` struct as data	
  * retreived form `sim` program.
  * @return 0 - on success, 1 - on failure.
  */
-int model_from_json(const char *desc);
+int model_from_json(struct json_object *j);
 
 /**
  * @brief Calculates joint angles for model.

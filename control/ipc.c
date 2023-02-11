@@ -5,6 +5,7 @@
  * @date 2023-02-08
  */
 
+#include <json-c/json_object.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -50,6 +51,10 @@ struct ipc_conn {
 };
 
 static struct ipc_conn *conns[MAX_ADDR_TP];
+
+/**********
+*  FIFO  *
+**********/
 
 static struct ipc_conn *fifo_conn_create(const char *in_path,
 										 const char *out_path, int in_oflags,
@@ -108,7 +113,7 @@ static int fifo_conn_request(struct fifo_conn *conn, char *buf, size_t n)
 {
 	int ret;
 
-	DBG("Sent: %s", buf);
+	DBG("Sent: %s\n", buf);
 	/*HEX(buf, strlen(buf));*/
 
 	if (write(conn->out_fd, buf, strlen(buf)) == -1) {
@@ -131,14 +136,49 @@ static int fifo_conn_request(struct fifo_conn *conn, char *buf, size_t n)
 	return 0;
 }
 
-int ipc_conn_request(enum conn_addr addr, char *buf, size_t n)
+/*************
+*  REQUEST  *
+*************/
+
+void get_request_template(const char *act, struct json_object **root,
+						  struct json_object **data)
+{
+	json_object *r, *d;
+
+	r = json_object_new_object();
+	d = json_object_new_object();
+
+	if (!r || !d) {
+		FATAL(ERR_MALLOC_FAIL);
+	} else if (!act) {
+		FATAL(ERR_INVALID_INPUT);
+	}
+
+	json_object_object_add(r, "act", json_object_new_string(act));
+	json_object_object_add(r, "data", d);
+
+	*root = r;
+	*data = d;
+}
+
+/**********
+*  BASE  *
+**********/
+
+int ipc_conn_request(enum conn_addr addr, struct json_object **j, size_t n)
 {
 	struct ipc_conn *conn;
+	char buf[IPC_BUF_LEN];
+	const char *p;
+	int ret = 1;
 
-	if (addr < 0 || addr > MAX_ADDR_TP) {
+	if (!*j || addr < 0 || addr > MAX_ADDR_TP) {
 		ERR(ERR_INVALID_INPUT);
 		return 1;
 	}
+
+	p = json_object_to_json_string(*j);
+	strncpy(buf, p, IPC_BUF_LEN);
 
 	conn = conns[addr];
 	if (!conn) {
@@ -148,11 +188,18 @@ int ipc_conn_request(enum conn_addr addr, char *buf, size_t n)
 
 	switch (conn->tp) {
 	case CONN_TP_FIFO:
-		return fifo_conn_request(&conn->conn.fifo, buf, n);
+		ret = fifo_conn_request(&conn->conn.fifo, buf, n);
 		break;
 	}
 
-	return 0;
+	json_object_put(*j);
+	*j = json_tokener_parse(buf);
+	if (!*j) {
+		ERR(ERR_PARSE_FAIL);
+		return 1;
+	}
+
+	return ret;
 }
 
 int ipc_setup()

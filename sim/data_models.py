@@ -292,11 +292,12 @@ class Quad:
             self.legs_cw[i].next = self.legs_cw[i+1]
 
     def get_json(self):
-        return {"legs": [l.get_json() for l in self.legs],
-                "base": {
-                    "max_dip": MAX_DIP,
-                    "leg_tar_h": LEG_TAR_H,
-                    "t_rad": T_RAD,
-                    "cw": cw_seq,
-                    "link_len": 0.1,
-        }}
+        return {
+            "base": {
+                "max_dip": MAX_DIP,
+                "leg_tar_h": LEG_TAR_H,
+                "t_rad": T_RAD,
+                "cw": cw_seq,
+                "link_len": 0.1,
+            }, "legs": [l.get_json() for l in self.legs]
+        }

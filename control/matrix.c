@@ -5,6 +5,8 @@
  * @date 2023-02-04
  */
 
+#include <json-c/json_object.h>
+#include <json-c/json_types.h>
 #include <log.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -445,6 +447,28 @@ char *mat_to_str(mat_t *m)
 		off += sprintf(buf + off, "]");
 
 	return buf;
+}
+
+struct json_object *mat_to_json(mat_t *m)
+{
+	struct json_object *l1, *l2;
+
+	if (!m) {
+		ERR(ERR_INVALID_INPUT);
+		return NULL;
+	}
+
+	l1 = json_object_new_array_ext(m->m);
+	for (int i = 0; i < m->m; i++) {
+		l2 = json_object_new_array_ext(m->n);
+		for (int j = 0; j < m->n; j++) {
+			json_object_array_put_idx(
+				l2, j, json_object_new_double(m->arr[m->n * i + j]));
+		}
+		json_object_array_put_idx(l1, i, l2);
+	}
+
+	return l1;
 }
 
 int mat_update_array(mat_t *mat, uint32_t l, float *arr)

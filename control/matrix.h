@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <json-c/json.h>
+
 /**
  * @brief Struct that holds all the matrix data.
  */
@@ -299,6 +301,13 @@ mat_t *mat_from_array(uint8_t m, uint8_t n, float *arr);
  * @return Allocated string buffer of NULL on failure.
  */
 char *mat_to_str(mat_t *m);
+
+/**
+ * @brief Returns serialized matrix inside `json_object` struct.
+ * @param[in] 	*m 	Matrix to serialize.
+ * @return Allocated `json_object` or NULL on failure.
+ */
+struct json_object *mat_to_json(mat_t *m);
 
 /**
  * @brief Updates internal array with given one.

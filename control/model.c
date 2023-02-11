@@ -6,8 +6,7 @@
  * @date 2023-02-04
  */
 
-#include <json_helper.h>
-#include <log.h>
+#include <json-c/json_types.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -15,9 +14,15 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include <json-c/json_object.h>
+#include <json-c/json_tokener.h>
+#include <json-c/json.h>
+
+#include "log.h"
 #include "mth.h"
 #include "matrix.h"
 #include "model.h"
+#include "json_helper.h"
 
 model_t *g_model = NULL;
 
@@ -79,14 +84,15 @@ static sens_t *alloc_sens()
 	return s;
 }
 
-int set_sens_from_json(const char *desc)
+int set_sens_from_json(struct json_object *j)
 {
-	int ret;
 	float tf[4], d[4], bv[3], bm[9], tfp[3];
+	struct json_object *tmp, *tmp2, *arr;
+	int ret = 0;
 	bool has_sens;
 	sens_t *s;
 
-	if (!desc || !g_model) {
+	if (!j || !g_model) {
 		return 1;
 	}
 
@@ -101,17 +107,87 @@ int set_sens_from_json(const char *desc)
 
 	s = g_model->sens;
 
-	// Parse model data
-	ret = sscanf(
-		desc,
-		"{\"avg_leg_h\": %f, \"touch_force\": [%f, %f, %f, %f], \"damp\": [%f, %f, %f, %f], \"bf_vec\": [%f, %f, %f], \"bfo_mat\": [[%f, %f, %f], [%f, %f, %f], [%f, %f, %f]], \"t_force\": {\"type\": %f, \"pos\": [%f, %f, %f]}}",
-		&s->avg_leg_h, &tf[0], &tf[1], &tf[2], &tf[4], &d[0], &d[1], &d[2],
-		&d[2], &d[3], &bv[0], &bv[1], &bv[2], &bm[0], &bm[1], &bm[2], &bm[3],
-		&bm[4], &bm[5], &bm[6], &bm[7], &bm[8], &tfp[0], &tfp[1], &tfp[2]);
-	if (ret != 25) {
-		ERR(ERR_PARSE_FAIL);
-		free_sens(s);
-		return 1;
+	// Avg_leg_h
+	if (!json_object_object_get_ex(j, "avg_leg_h", &tmp)) {
+		goto err;
+	}
+
+	s->avg_leg_h = json_object_get_double(tmp);
+
+	// Touch_force
+	if (!json_object_object_get_ex(j, "touch_force", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 4; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		tf[i] = json_object_get_int(tmp);
+	}
+
+	// Damp
+	if (!json_object_object_get_ex(j, "damp", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		d[i] = json_object_get_double(tmp);
+	}
+
+	// Bf_vvec
+	if (!json_object_object_get_ex(j, "bf_vec", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		bv[i] = json_object_get_double(tmp);
+	}
+
+	// Bfo_mat
+	if (!json_object_object_get_ex(j, "bfo_mat", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp2 = json_object_array_get_idx(arr, i)))
+			goto err;
+		for (int j = 0; j < 3; j++) {
+			if (!(tmp = json_object_array_get_idx(tmp2, j)))
+				goto err;
+
+			bm[i * 3 + j] = json_object_get_double(tmp);
+		}
+	}
+
+	// T_force
+	if (!json_object_object_get_ex(j, "t_force", &tmp2)) {
+		goto err;
+	}
+
+	// T_force: Type
+	if (!json_object_object_get_ex(tmp2, "type", &tmp)) {
+		goto err;
+	}
+
+	s->tf_type = json_object_get_double(tmp);
+
+	// T_force: Pos
+	if (!json_object_object_get_ex(tmp2, "pos", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		tfp[i] = json_object_get_double(tmp);
 	}
 
 	if (!has_sens) {
@@ -140,6 +216,11 @@ int set_sens_from_json(const char *desc)
 	}
 
 	return 0;
+
+err:
+	ERR(ERR_PARSE_FAIL);
+	free_sens(s);
+	return 1;
 }
 
 /**
@@ -147,13 +228,13 @@ int set_sens_from_json(const char *desc)
  * @param[in] desc 		NULL terminated model description in json format.
  * @return 0 - on success, 1 - on failure.
  */
-static leg_t *leg_from_json(const char *desc)
+static leg_t *leg_from_json(struct json_object *j)
 {
-	leg_t *l;
-	int ret;
+	leg_t *l = NULL;
 	float p[3], dp[3], bo[3], d[3], jl[6];
+	struct json_object *tmp, *arr;
 
-	if (!desc) {
+	if (!j) {
 		return NULL;
 	}
 
@@ -161,17 +242,79 @@ static leg_t *leg_from_json(const char *desc)
 	if (!l) {
 		FATAL(ERR_MALLOC_FAIL);
 	}
-	// Parse model data
-	ret = sscanf(
-		desc,
-		"{\"name\": \"%15[^\"]\", \"idx\": %hhu, \"pos\": [%f, %f, %f], \"def_pos\": [%f, %f, %f], \"base_off\": [%f, %f, %f], \"dir\": [%f, %f, %f], \"joint_lims\": [%f, %f, %f, %f, %f, %f]}",
-		l->name, &l->idx, &p[0], &p[1], &p[2], &dp[0], &dp[1], &dp[2], &bo[0],
-		&bo[1], &bo[2], &d[0], &d[1], &d[2], &jl[0], &jl[1], &jl[2], &jl[3],
-		&jl[4], &jl[5]);
-	if (ret != 20) {
-		ERR(ERR_PARSE_FAIL);
-		free(l);
-		return NULL;
+
+	// Name
+	if (!json_object_object_get_ex(j, "name", &tmp)) {
+		goto err;
+	}
+
+	strncpy(l->name, json_object_get_string(tmp), NAME_LEN);
+
+	// Index
+	if (!json_object_object_get_ex(j, "idx", &tmp)) {
+		goto err;
+	}
+
+	l->idx = json_object_get_int(tmp);
+
+	// Position
+	if (!json_object_object_get_ex(j, "pos", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		p[i] = json_object_get_double(tmp);
+	}
+
+	// Default position
+	if (!json_object_object_get_ex(j, "def_pos", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		dp[i] = json_object_get_double(tmp);
+	}
+
+	// Base offset
+	if (!json_object_object_get_ex(j, "base_off", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		bo[i] = json_object_get_double(tmp);
+	}
+
+	// Dir
+	if (!json_object_object_get_ex(j, "dir", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 3; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		d[i] = json_object_get_double(tmp);
+	}
+
+	// Joint_limit
+	if (!json_object_object_get_ex(j, "joint_lims", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 6; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		jl[i] = json_object_get_double(tmp);
 	}
 
 	l->pos = mat_from_array(1, 3, p);
@@ -181,11 +324,15 @@ static leg_t *leg_from_json(const char *desc)
 	l->joint_lims = mat_from_array(1, 6, jl);
 
 	if (!l->pos || !l->def_pos || !l->base_off || !l->dir || !l->joint_lims) {
-		ERR(ERR_PARSE_FAIL);
-		free_leg(l);
+		goto err;
 	}
 
 	return l;
+err:
+	ERR(ERR_PARSE_FAIL);
+	free(l);
+
+	return NULL;
 }
 
 /**
@@ -259,36 +406,14 @@ void model_get_angles()
 	}
 }
 
-int model_from_json(const char *desc)
+int model_from_json(struct json_object *j)
 {
-	struct json_status st;
-	int ret;
-	const char *ptr, *legs_ptr;
 	model_t *mod;
 	leg_t *l;
+	struct json_object *tmp, *tmp2, *arr;
 
-	if (!desc) {
-		return 1;
-	}
-
-	ptr = json_help_step_in(desc);
-	if (!ptr) {
-		ERR(ERR_PARSE_FAIL);
-		return 1;
-	}
-
-	if (json_help_analyze(ptr, &st)) {
-		ERR(ERR_PARSE_FAIL);
-		return 1;
-	}
-
-	// save pointer to leg data for later
-	legs_ptr = st.inner;
-
-	ptr = st.start + st.n;
-
-	if (json_help_analyze(ptr, &st)) {
-		ERR(ERR_PARSE_FAIL);
+	if (!j) {
+		ERR(ERR_INVALID_INPUT);
 		return 1;
 	}
 
@@ -297,34 +422,94 @@ int model_from_json(const char *desc)
 		FATAL(ERR_MALLOC_FAIL);
 	}
 
-	// Parse model data
-	ret = sscanf(
-		st.start,
-		"{\"max_dip\": %f, \"leg_tar_h\": %f, \"t_rad\": %f, \"cw\": [%d, %d, %d, %d], \"link_len\": %f}",
-		&mod->max_dip, &mod->leg_tar_h, &mod->t_rad, &mod->cw[0], &mod->cw[1],
-		&mod->cw[2], &mod->cw[3], &mod->link_len);
-	if (ret != 8) {
-		ERR(ERR_PARSE_FAIL);
-		free(mod);
-		return 1;
+	printf("MODEL:%s\n", json_object_get_string(j));
+
+	// Base
+	if (!json_object_object_get_ex(j, "base", &tmp2)) {
+		goto err;
 	}
 
-	// Parse legs
+	// Max_dip
+	if (!json_object_object_get_ex(tmp2, "max_dip", &tmp)) {
+		goto err;
+	}
+
+	mod->max_dip = json_object_get_double(tmp);
+
+	// Leg_tar_h
+	if (!json_object_object_get_ex(tmp2, "leg_tar_h", &tmp)) {
+		goto err;
+	}
+
+	mod->leg_tar_h = json_object_get_double(tmp);
+
+	// T_rad
+	if (!json_object_object_get_ex(tmp2, "t_rad", &tmp)) {
+		goto err;
+	}
+
+	mod->t_rad = json_object_get_double(tmp);
+
+	// Link_len
+	if (!json_object_object_get_ex(tmp2, "link_len", &tmp)) {
+		goto err;
+	}
+
+	mod->link_len = json_object_get_double(tmp);
+
+	// Max_dip
+	if (!json_object_object_get_ex(tmp2, "max_dip", &tmp)) {
+		goto err;
+	}
+
+	mod->max_dip = json_object_get_double(tmp);
+
+	// Leg_tar_h
+	if (!json_object_object_get_ex(tmp2, "leg_tar_h", &tmp)) {
+		goto err;
+	}
+
+	mod->leg_tar_h = json_object_get_double(tmp);
+
+	// T_rad
+	if (!json_object_object_get_ex(tmp2, "t_rad", &tmp)) {
+		goto err;
+	}
+
+	mod->t_rad = json_object_get_double(tmp);
+
+	// CW
+	if (!json_object_object_get_ex(tmp2, "cw", &arr)) {
+		goto err;
+	}
+
+	for (int i = 0; i < 4; i++) {
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
+
+		mod->cw[i] = json_object_get_int(tmp);
+	}
+
+	// Link_len
+	if (!json_object_object_get_ex(tmp2, "link_len", &tmp)) {
+		goto err;
+	}
+
+	mod->link_len = json_object_get_double(tmp);
+
+	// Legs
+	if (!json_object_object_get_ex(j, "legs", &arr)) {
+		goto err;
+	}
+
 	for (int i = 0; i < N_LEGS; i++) {
-		if (json_help_analyze(legs_ptr, &st)) {
-			ERR(ERR_PARSE_FAIL);
-			free_model(mod);
-			return 1;
-		}
+		if (!(tmp = json_object_array_get_idx(arr, i)))
+			goto err;
 
-		l = leg_from_json(st.start);
+		l = leg_from_json(tmp);
 		if (!l) {
-			ERR(ERR_PARSE_FAIL);
-			free_model(mod);
-			return 1;
+			goto err;
 		}
-
-		legs_ptr = st.start + st.n;
 
 		mod->legs[l->idx] = l;
 		mod->cw_legs[mod->cw[l->idx]] = l;
@@ -338,16 +523,18 @@ int model_from_json(const char *desc)
 
 	mod->angles = mat_create(4, 3, true);
 	if (!mod->angles) {
-		ERR(ERR_ERROR);
-		free_model(mod);
-		return 1;
+		goto err;
 	}
 
 	// Free previous model
 	free_model(g_model);
 	g_model = mod;
-
 	return 0;
+
+err:
+	json_object_put(j);
+	free_model(g_model);
+	return 1;
 }
 
 void free_model(model_t *mod)
