@@ -1,3 +1,4 @@
 control/control
 tags
 *.o
+sim/__pycache__

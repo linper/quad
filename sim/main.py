@@ -2,15 +2,14 @@ import pybullet as p
 import json
 import time
 import numpy as np
+import time
 import os
 from data_models import Quad, Leg
 from consts import T_RAD
 
-SIM_VIEW_PIPE = "/tmp/sim_view_pipe"
 SIM_CTL_PIPE = "/tmp/sim_ctl_pipe"
 CTL_SIM_PIPE = "/tmp/ctl_sim_pipe"
 
-sv_pp = None
 sc_pp = None
 cs_pp = None
 
@@ -27,26 +26,26 @@ RIGHT_POS = np.array([0.0, 0.05, -0.23])
 def update_joints(data):
     for i, l in enumerate(q.legs):
         angles = data[i]
-        damp = l.dampener[i] * T_RAD
+        damp = q.sens_info.damp[i] * T_RAD
 
-        p.setjointmotorcontrol2(q.model, l.base, p.position_control, angles[2],
-                                force=p.getjointinfo(q.model, l.base)[
+        p.setJointMotorControl2(q.model, l.base, p.POSITION_CONTROL, angles[2],
+                                force=p.getJointInfo(q.model, l.base)[
             10] / 100,
-            maxvelocity=p.getjointinfo(q.model, l.base)[11])
-        p.setjointmotorcontrol2(q.model, l.shoulder, p.position_control, angles[1],
-                                force=p.getjointinfo(q.model, l.shoulder)[
+            maxVelocity=p.getJointInfo(q.model, l.base)[11])
+        p.setJointMotorControl2(q.model, l.shoulder, p.POSITION_CONTROL, angles[1],
+                                force=p.getJointInfo(q.model, l.shoulder)[
             10] / 100,
-            maxvelocity=p.getjointinfo(q.model, l.shoulder)[11])
-        p.setjointmotorcontrol2(q.model, l.knee, p.position_control, angles[0],
-                                force=p.getjointinfo(q.model, l.knee)[
+            maxVelocity=p.getJointInfo(q.model, l.shoulder)[11])
+        p.setJointMotorControl2(q.model, l.knee, p.POSITION_CONTROL, angles[0],
+                                force=p.getJointInfo(q.model, l.knee)[
             10] / 100,
-            maxvelocity=p.getjointinfo(q.model, l.knee)[11])
-        p.setjointmotorcontrol2(q.model, l.heel, p.position_control, -angles[0],
-                                force=p.getjointinfo(q.model, l.heel)[
+            maxVelocity=p.getJointInfo(q.model, l.knee)[11])
+        p.setJointMotorControl2(q.model, l.heel, p.POSITION_CONTROL, -angles[0],
+                                force=p.getJointInfo(q.model, l.heel)[
             10] / 100,
-            maxvelocity=p.getjointinfo(q.model, l.heel)[11])
-        p.setjointmotorcontrol2(q.model, l.dampener, controlmode=p.position_control,
-                                targetposition=0.0,
+            maxVelocity=p.getJointInfo(q.model, l.heel)[11])
+        p.setJointMotorControl2(q.model, l.dampener, controlMode=p.POSITION_CONTROL,
+                                targetPosition=0.0,
                                 force=l.stiffness_c * (damp / l.damp_len))
 
 
@@ -196,21 +195,22 @@ def api_step(data):
         os.write(sc_pp, bytes(NO_MODEL, "utf-8"))
         return
 
-    try:
-        if data is not None and \
-                (parsed_array := data("angles")) is not None and \
-                parsed_array is not None and \
-                len(parsed_array) == 4:
-
-            p.stepSimulation()
-            q.sens_info.update()
-            update_joints(parsed_array)
-
-            os.write(sc_pp,
-                     bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
-            return
-    except:
+    parsed_array = data.get("angles")
+    if (parsed_array is None or len(parsed_array) != 4):
         os.write(sc_pp, bytes(NO_DATA, "utf-8"))
+        return
+
+    p.stepSimulation()
+    q.sens_info.update()
+    update_joints(parsed_array)
+
+    os.write(sc_pp,
+             bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
+    time.sleep(0.03)
+    # return
+    # except Exception as e:
+    # os.write(sc_pp, bytes(NO_DATA, "utf-8"))
+    # print(e)
 
     return
 
@@ -241,7 +241,7 @@ def api_sensors(data):
 
 
 def listen_ctl():
-    global sc_pp, cs_pp, sv_pp
+    global sc_pp, cs_pp
 
     try:
         os.mkfifo(SIM_CTL_PIPE)
@@ -251,13 +251,8 @@ def listen_ctl():
         os.mkfifo(CTL_SIM_PIPE)
     except:
         pass
-    try:
-        os.mkfifo(SIM_VIEW_PIPE)
-    except:
-        pass
 
     sc_pp = os.open(SIM_CTL_PIPE, os.O_RDWR)
-    sv_pp = os.open(SIM_VIEW_PIPE, os.O_RDWR)
 
     while True:
         cs_pp = os.open(CTL_SIM_PIPE, os.O_RDONLY)
@@ -301,11 +296,12 @@ actions = {
 
 if __name__ == "__main__":
     listen_ctl()
-    # try:
-    # os.unlink(PE_SOCK)
-    # except Exception as e:
-    # print(e)
 
-    # with UnixStreamServer(PE_SOCK, ComHandler) as server:
-    # server.serve_forever()
-    # main()
+    # connect_pe()
+    # load_env()
+    # m = load_robot()
+    # q = build_model(m)
+    # while(True):
+    # p.stepSimulation()
+    # q.sens_info.update()
+    # time.sleep(0.02)

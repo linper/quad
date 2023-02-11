@@ -1,17 +1,20 @@
 import math
-from tkinter import *
+import tkinter as tk
 import numpy as np
-from leg import Leg
-from quad import Quad
-from consts import *
-from fsm import FSM
-from interp import *
+import os
+# from leg import Leg
+# from quad import Quad
+# from consts import *
+# from fsm import FSM
+# from interp import *
+import json
 import functools
 from enum import IntEnum
-import pybullet as p
-import multiprocessing as mp
 import time
-from misc import ActCmd
+# from misc import ActCmd
+
+VC_PATH = "/tmp/view_ctl_pipe"
+CV_PATH = "/tmp/ctl_view_pipe"
 
 
 class GoPoint:
@@ -61,47 +64,59 @@ class SPoint:
 
 
 class GrView:
-    def __init__(self, q_from: mp.Queue, q_to: mp.Queue, q_cmd: mp.Queue):
-        self.q_from: mp.Queue=q_from
-        self.q_to: mp.Queue=q_to
-        self.q_cmd: mp.Queue=q_cmd
-        self.root=Tk()
+    def __init__(self):
+        self.root=tk.Tk()
         self.mul=800
         self.height=800
         self.width=600
-        self.path_sent=False
-        self.root.title="ground view"
-        self.q: Quad
-        self.sel_mode=IntVar()
-        self.test_mode=IntVar()
-        self.space=Canvas(self.root, background = "white",
+        self.root.title="View"
+        # self.path_sent=False
+        # self.q: Quad
+        self.sel_mode=tk.IntVar()
+        self.test_mode=tk.IntVar()
+
+        self.space=tk.Canvas(self.root, background = "white",
                             height = self.height, width = self.width)
-        self.space.bind("<Button-1>", self.btn_clk)
-        self.space.bind("<Double-Button-1>", self.btn_dbl_clk)
+        self.space.bind("<Button-1>", self.on_btn_clk)
+        self.space.bind("<Double-Button-1>", self.on_btn_dbl_clk)
         self.space.grid(row = 0, column = 0)
         # self.saved: list = []
         self.tasks: list=[GoTask(-1), GoTask(0),
                                  GoTask(1), GoTask(2), GoTask(3)]
         self.task_cmd = GoCmd(self.tasks)
-        b= Button(self.root, text = "Go", command =self.send_go_cmd)
+        b= tk.Button(self.root, text = "Go", command =self.send_go_cmd)
         b.place(x = 0, y =self.height - 20)
-        b= Button(self.root, text = "Clear", command =self.send_clear_cmd)
+        b= tk.Button(self.root, text = "Clear", command =self.send_clear_cmd)
         b.place(x = 0, y =self.height - 50)
-        b= Button(self.root, text = "Plot", command =self.send_plot_cmd)
+        b= tk.Button(self.root, text = "Plot", command =self.on_plot_btn_clk)
         b.place(x = 0, y =self.height - 80)
-        R1= Radiobutton(self.root, text = "Set target", variable =self.sel_mode, value=0)
+        R1= tk.Radiobutton(self.root, text = "Set target", variable =self.sel_mode, value=0)
         R1.place(x = 0, y =self.height + 25)
 
-        R2= Radiobutton(self.root, text = "Set direction", variable =self.sel_mode, value=1)
+        R2= tk.Radiobutton(self.root, text = "Set direction", variable =self.sel_mode, value=1)
         R2.place(x = 0, y =self.height + 5)
         self.sel_mode.set(0)
 
-        R3= Radiobutton(self.root, text = "Do move", variable=self.test_mode, value=0, command=self.sel_test_mode)
+        R3= tk.Radiobutton(self.root, text = "Do move", variable=self.test_mode, value=0, command=self.sel_test_mode)
         R3.place(x = 100, y =self.height + 25)
 
-        R4= Radiobutton(self.root, text = "Test move", variable=self.test_mode, value=1, command=self.sel_test_mode)
+        R4= tk.Radiobutton(self.root, text = "Test move", variable=self.test_mode, value=1, command=self.sel_test_mode)
         R4.place(x = 100, y =self.height + 5)
         self.test_mode.set(0)
+
+        try:
+            os.mkfifo(VC_PATH)
+        except:
+            pass
+        try:
+            os.mkfifo(CV_PATH)
+        except:
+            pass
+
+        self.vc_fd = os.open(VC_PATH, os.O_RDWR)
+        self.cv_fd = os.open(CV_PATH, os.O_RDWR)
+        
+        self.root.tk.createfilehandler(self.cv_fd, tk.READABLE, self.on_got_msg)
 
     def sel_test_mode(self):
         self.task_cmd.test_mode = bool(self.test_mode.get())
@@ -126,7 +141,7 @@ class GrView:
                                # pt[0] + r, pt[1] + r, fill="black")
 
 
-    def draw_leg_circle(self, leg, q: Quad):
+    def draw_leg_circle(self, leg, q):
         force=q.sens_info.touch_force[leg.idx]
         damp_val_n=q.sens_info.damp[leg.idx]
 
@@ -157,7 +172,7 @@ class GrView:
         self.space.create_oval(sp.x - r, sp.y - r, sp.x +
                                r, sp.y + r, fill=sp.color)
 
-    def draw_force(self, q: Quad):
+    def draw_force(self, q):
         reduced = self.mul * q.sens_info.t_force_info.pos * \
             np.array([1, 1, 1]) + \
             np.array([self.height / 2, self.width / 2, 0])
@@ -169,7 +184,7 @@ class GrView:
         self.space.create_text(reduced[1] - 16, reduced[0] - 26,
                 anchor=W, text=f"{round(q.sens_info.avg_leg_h, 3)}:{round(q.sens_info.abs_std_leg_h, 3)}")
 
-    def draw_leg_adjust(self, leg, q: Quad):
+    def draw_leg_adjust(self, leg, q):
         cpt = np.array([self.height / 2, self.width / 2, 0])
         lpt = self.mul * leg.position * \
             np.array([1, 1, 1]) + \
@@ -202,7 +217,7 @@ class GrView:
             ix, iy, cpt[1], cpt[0], width=4, fill=color)
         self.space.pack()
 
-    def draw_perimeter(self, q: Quad):
+    def draw_perimeter(self, q):
         t_legs = [l for i, l in enumerate(
             q.legs_cw) if q.sens_info.touch_force[l.idx] > 0]
 
@@ -230,7 +245,7 @@ class GrView:
                 lpt[1], lpt[0], cpt[1], cpt[0], width=1, fill="green")
             self.space.pack()
 
-    def draw_s_sines(self, q: Quad):
+    def draw_s_sines(self, q):
         sc = self.mul * q.sens_info.s_center * \
             np.array([1, 1, 1]) + \
             np.array([self.height / 2, self.width / 2, 0])
@@ -326,13 +341,9 @@ class GrView:
 
         self.send_go_cmd()
 
-    def send_plot_cmd(self):
-        while self.q_cmd.full():
-            print("GV cmd queue is full, sleeping...")
-            time.sleep(0.05)
-
+    def on_plot_btn_clk(self):
         print("plot")
-        self.q_cmd.put(ActCmd.PLOT)
+        os.write(self.vc_fd, bytes(json.dumps({"act": "hello", "data": "empty"}), "utf-8"))
 
     def __clear_dummies(self):
         for t in self.tasks:
@@ -340,7 +351,7 @@ class GrView:
                 t.clear()
 
 
-    def btn_clk(self, ev):
+    def on_btn_clk(self, ev):
         self.__clear_dummies()
         err = 10
 
@@ -385,7 +396,7 @@ class GrView:
                 t.add_pt(GoPoint(pos))
                 t.exp_set = True
 
-    def btn_dbl_clk(self, ev):
+    def on_btn_dbl_clk(self, ev):
         self.__clear_dummies()
         # print("dbl clicked")
         err = 10
@@ -421,7 +432,12 @@ class GrView:
                     if len(t.points) == 0:
                         t.exp_set = False
 
-    def update(self, q: Quad):
+    def on_got_msg(self, arg1, arg2):
+        print(f"GOT MSG {arg1} : {arg2}")
+        msg = os.read(self.cv_fd, 2048)
+        print(f"msg: {msg}")
+
+    def update(self, q):
         self.root.update()
 
         self.space.delete("all")
@@ -438,24 +454,11 @@ class GrView:
         self.draw_s_sines(q)
         self.draw_force(q)
 
-    def start(self):
-        q: Quad
-        while True:
-            if self.q_from.empty():
-                # print("GV queue is empty, sleeping...")
-                time.sleep(0.001)
-            else:
-                while not self.q_from.empty():
-                    q = self.q_from.get()
-
-                self.q = q
-                self.update(q)
-                #     q = self.q_from.get()
-                # self.update(self.q_from.get())
-                # self.q_from.get()
+    def setup(self):
+        pass
 
 
-def tk_start(q_from, q_to, q_cmd):
-    gv = GrView(q_from, q_to, q_cmd)
-    gv.root.after(200, gv.start)
+if __name__ == "__main__":
+    gv = GrView()
+    gv.setup()
     gv.root.mainloop()

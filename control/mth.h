@@ -5,8 +5,9 @@
  * @date 2023-02-04
  */
 
-#ifndef MTH_H
-#define MTH_H
+#pragma once
+
+#include <math.h>
 
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define MAX(a, b) ((a) >= (b) ? (a) : (b))
@@ -14,4 +15,14 @@
 
 float area(float *p1, float *p2, float *p3);
 
-#endif // MTH_H
+inline float bound_data(float dt, float lo, float hi)
+{
+	if (dt < lo) {
+		return lo;
+	} else if (dt > hi) {
+		return hi;
+	} else {
+		return dt;
+	}
+}
+

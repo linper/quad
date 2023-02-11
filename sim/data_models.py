@@ -298,4 +298,5 @@ class Quad:
                     "leg_tar_h": LEG_TAR_H,
                     "t_rad": T_RAD,
                     "cw": cw_seq,
+                    "link_len": 0.1,
         }}

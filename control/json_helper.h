@@ -4,8 +4,7 @@
  * @author Linas Perkauskas
  * @date 2023-02-04
  */
-#ifndef JSON_HELPER_H
-#define JSON_HELPER_H
+#pragma once
 
 /**
  * @brief Struct that holds json analysis results
@@ -45,4 +44,3 @@ const char *json_help_step_in(const char *str);
  */
 const char *json_help_step_in(const char *str);
 
-#endif // JSON_HELPER_H

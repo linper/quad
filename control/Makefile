@@ -5,11 +5,11 @@ OBJ = $(patsubst %.c,%.o,$(SRC))
 
 #CFLAGS = -O0
 CFLAGS = -Og -g -Werror -Wall -Wextra -Wno-unused-function
-LDFLAGS += -lreadline
+LDFLAGS += -lreadline -lm
 
 RM = rm -f
 
-all: clean compile 
+all: compile 
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)

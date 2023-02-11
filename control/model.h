@@ -5,8 +5,7 @@
  * @date 2023-02-04
  */
 
-#ifndef MODEL_H
-#define MODEL_H
+#pragma once
 
 #include <stdint.h>
 #include <sys/types.h>
@@ -37,6 +36,7 @@ typedef struct leg {
 	leg_t *next; ///< 			Next non-cw leg
 	leg_t *cw_next; ///< 		Next cw leg
 	char name[16]; ///< 		Name of leg
+	float angles[3]; ///< 		Calculated joint angles
 	u_int8_t idx; ///< 			NON-CW index of leg
 	mat_t *pos; ///< 			Current position of leg (3 x 1)
 	mat_t *def_pos; ///< 		Default position of leg (3 x 1)
@@ -51,7 +51,8 @@ typedef struct leg {
 typedef struct model {
 	leg_t *legs[N_LEGS];
 	leg_t *cw_legs[N_LEGS];
-	sens_t *sens;
+	sens_t *sens; ///< 		Sensor info
+	mat_t *angles; ///< 	Calculated joint angles
 
 	/***************
 	*  CONSTANTS  *
@@ -60,6 +61,7 @@ typedef struct model {
 	float max_dip; ///< 	How low can legs decend
 	float leg_tar_h;
 	float t_rad; ///< 		Touch radius
+	float link_len; ///< 	Length of single leg link
 	int cw[4]; ///< 		Clock-wise seg sequence
 } model_t;
 
@@ -87,12 +89,16 @@ int update_sens_from_json(const char *desc);
 int model_from_json(const char *desc);
 
 /**
+ * @brief Calculates joint angles for model.
+ * @return Nothing.
+ */
+void model_get_angles();
+/**
  * @brief Frees `g_mod` model.
  * @param[in] 	*mod 	Model struct to free.
- * @return nothing
+ * @return Nothing
  */
 void free_model(model_t *mod);
 
 extern model_t *g_model;
 
-#endif // MODEL_H
