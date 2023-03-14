@@ -4,6 +4,8 @@ import time
 import numpy as np
 import time
 import os
+from enum import IntEnum
+
 from data_models import Quad, Leg
 from consts import T_RAD
 
@@ -21,6 +23,16 @@ BACK_DIR_LEFT = [-1, 1, -1]
 BACK_DIR_RIGHT = [-1, 1, 1]
 LEFT_POS = np.array([0.0, -0.05, -0.23])
 RIGHT_POS = np.array([0.0, 0.05, -0.23])
+
+
+class STATUS(IntEnum):
+    OK = 0
+    ERROR = 1
+    NOT_INIT = 2
+    NO_DATA = 3
+    PARSE = 4
+    SUPPORT = 5
+    MAX__ = 6
 
 
 def update_joints(data):
@@ -162,19 +174,21 @@ def build_model(model):
 #########
 
 
-RES_OK = json.dumps({"status":  "ok"})
-NO_MODEL = json.dumps({"status": "error",  "msg": "Model not set up"})
-ALREADY_RUNNING = json.dumps({"status": "error",  "msg": "Already running"})
-NO_DATA = json.dumps({"status": "error",  "msg": "No or bad data found"})
-PARSE_FAIL = json.dumps({"status": "error",  "msg": "Failed to parse"})
-NOT_SUPPORTED = json.dumps({"status": "error",  "msg": "Unsupported action"})
+RES_OK = {"status":  STATUS.OK}
+RES_ERROR = {"status":  STATUS.ERROR}
+NO_MODEL = {"status": STATUS.NOT_INIT}
+NO_DATA = {"status": STATUS.NO_DATA}
+PARSE_FAIL = {"status": STATUS.PARSE}
+NOT_SUPPORTED = {"status": STATUS.SUPPORT}
+
+RSP_EMPTY = {"rsp": "empty"}
 
 
-def api_setup(data):
+def api_setup(req, data):
     global q
 
     if q is not None:
-        os.write(sc_pp, bytes(ALREADY_RUNNING, "utf-8"))
+        req.update(RES_OK)
         return
 
     connect_pe()
@@ -182,62 +196,58 @@ def api_setup(data):
     m = load_robot()
     q = build_model(m)
 
-    os.write(sc_pp, bytes(RES_OK, "utf-8"))
+    req.update(RES_OK)
 
 
-def api_stop(data):
-    os.write(sc_pp, b"exit")
+def api_stop(req, data):
+    os.write(sc_pp, bytes(json.dumps(RES_OK), "utf-8"))
     quit(0)
 
 
-def api_step(data):
+def api_step(req, data):
     if q is None:
-        os.write(sc_pp, bytes(NO_MODEL, "utf-8"))
+        req.update(NO_MODEL)
         return
 
     parsed_array = data.get("angles")
     if (parsed_array is None or len(parsed_array) != 4):
-        os.write(sc_pp, bytes(NO_DATA, "utf-8"))
+        req.update(NO_DATA)
         return
 
     p.stepSimulation()
     q.sens_info.update()
     update_joints(parsed_array)
 
-    os.write(sc_pp,
-             bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
+    req.update(RES_OK)
+    req.update({"rsp": q.sens_info.get_json()})
     time.sleep(0.03)
-    # return
-    # except Exception as e:
-    # os.write(sc_pp, bytes(NO_DATA, "utf-8"))
-    # print(e)
-
-    return
 
 
-def api_echo(data):
+def api_echo(req, data):
     if data is None:
-        os.write(sc_pp, bytes(NO_DATA, "utf-8"))
+        req.update(NO_DATA)
         return
 
-    os.write(sc_pp, bytes(data, "utf-8"))
-    return
+    req.update(RES_OK)
+    req.update({"rsp": data})
 
 
-def api_model(data):
+def api_model(req, data):
     if q is None:
-        os.write(sc_pp, bytes(NO_MODEL, "utf-8"))
+        req.update(NO_MODEL)
         return
 
-    os.write(sc_pp, bytes(json.dumps(q.get_json()), "utf-8"))
+    req.update(RES_OK)
+    req.update({"rsp": q.get_json()})
 
 
-def api_sensors(data):
+def api_sensors(req, data):
     if q is None:
-        os.write(sc_pp, bytes(NO_MODEL, "utf-8"))
+        req.update(NO_MODEL)
         return
 
-    os.write(sc_pp, bytes(json.dumps(q.sens_info.get_json()), "utf-8"))
+    req.update(RES_OK)
+    req.update({"rsp": q.sens_info.get_json()})
 
 
 def listen_ctl():
@@ -273,13 +283,18 @@ def listen_ctl():
                 continue
 
             data = json_msg.get("data")
+            msg_id = json_msg.get("id")
             act_str = json_msg.get("act")
             act = actions.get(act_str)
+            req = {"id": -1 if msg_id is None else msg_id,
+                   "act": act_str, "rsp": "empty"}
             if act is not None:
                 print(f"executing:{act_str}")
-                act(data)
+                act(req, data)
             else:
-                os.write(sc_pp, bytes(NOT_SUPPORTED, "utf-8"))
+                req.update(NOT_SUPPORTED)
+
+            os.write(sc_pp, bytes(json.dumps(req), "utf-8"))
 
         os.close(cs_pp)
 

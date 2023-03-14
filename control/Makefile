@@ -4,8 +4,9 @@ SRC = $(wildcard *.c)
 OBJ = $(patsubst %.c,%.o,$(SRC))
 
 #CFLAGS = -O0
-CFLAGS = -Og -g -Werror -Wall -Wextra -Wno-unused-function
-LDFLAGS += -lreadline -lm -ljson-c
+CFLAGS = -rdynamic -Og -g -Werror -Wall -Wextra -D_GNU_SOURCE
+#CFLAGS += -Wno-unused-function
+LDFLAGS += -lreadline -lm -ljson-c -lgsl -lgslcblas
 
 RM = rm -f
 

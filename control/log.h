@@ -7,12 +7,15 @@
 
 #pragma once
 
+#include <stdio.h>
+
 #define ERR_NOT_FOUND "Not found\n"
 #define ERR_MALLOC_FAIL "Failed to allocate memory\n"
 #define ERR_ERROR "Unknown error\n"
 #define ERR_INVALID_INPUT "Invalid input\n"
 #define ERR_PARSE_FAIL "Failed to parse\n"
 #define ERR_RANGE "Out of range\n"
+#define ERR_IMPL "Not implemented\n"
 
 #define NLS "%s\n"
 #define NLD "%s\n"
@@ -24,7 +27,15 @@
 			fprintf(stdout, "HIT %s:%d\n", __func__, __LINE__);                \
 			fflush(stdout);                                                    \
 		}                                                                      \
-	} while (0);
+	} while (0)
+
+#define TRACE                                                                  \
+	do {                                                                       \
+		if (!quiet) {                                                          \
+			print_trace(stdout);                                               \
+			fflush(stdout);                                                    \
+		}                                                                      \
+	} while (0)
 
 #define DBG(fmt, args...)                                                      \
 	do {                                                                       \
@@ -45,6 +56,7 @@
 #define FATAL(fmt, args...)                                                    \
 	do {                                                                       \
 		fprintf(stderr, "FATAL %s[%d]: " fmt, __func__, __LINE__, ##args);     \
+		print_trace(stderr);                                                   \
 		fflush(stderr);                                                        \
 		exit(EXIT_FAILURE);                                                    \
 	} while (0)
@@ -61,3 +73,6 @@
 	} while (0)
 
 extern int quiet, debug;
+
+void print_trace(FILE *stream);
+

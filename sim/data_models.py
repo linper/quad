@@ -5,7 +5,7 @@ from enum import IntEnum
 import math
 import functools
 from numba import njit
-from consts import cw_seq, LEG_TAR_H, MAX_DIP, T_RAD
+from consts import cw_seq, LEG_TAR_H, MAX_DIP, MIN_DIP, T_RAD
 
 
 @njit
@@ -74,6 +74,8 @@ class SensInfo:
         return {
             "avg_leg_h": round(self.avg_leg_h, 4),
             "touch_force": self.touch_force.round(4).tolist(),
+            "abs_std_leg_h": self.abs_std_leg_h,
+            "avg_leg_h": self.avg_leg_h,
             "damp": self.damp.round(4).tolist(),
             "bf_vec": self.base_force_vector.round(4).tolist(),
             "bfo_mat": self.base_frame_orientation_matrix.round(4).tolist(),
@@ -295,9 +297,13 @@ class Quad:
         return {
             "base": {
                 "max_dip": MAX_DIP,
+                "min_dip": MIN_DIP,
+                "max_walk_h": MAX_WALK_H,
+                "min_walk_h": MIN_WALK_H,
                 "leg_tar_h": LEG_TAR_H,
                 "t_rad": T_RAD,
                 "cw": cw_seq,
                 "link_len": 0.1,
+                "soft_hit_thr": SOFT_HIT_THR,
             }, "legs": [l.get_json() for l in self.legs]
         }

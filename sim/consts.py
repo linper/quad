@@ -4,8 +4,12 @@ from enum import Enum
 from numba import njit
 
 MAX_DIP = -0.35
+MIN_DIP = -0.1
 LEG_TAR_H = -0.26
 T_RAD = 0.012
+MAX_WALK_H = -0.13
+MIN_WALK_H = -0.20
+SOFT_HIT_THR = 0.02
 
 cw_seq = [0, 1, 3, 2]
 
@@ -13,15 +17,10 @@ cw_seq = [0, 1, 3, 2]
 #  UNUSED  #
 ############
 
-MIN_DIP = -0.1
 WALK_H = -0.13
-# MAX_WALK_H = -0.17
-MAX_WALK_H = -0.13
-MIN_WALK_H = -0.20
 MIN_PERIOD = 0.02
 ADJUST_SENS = abs(T_RAD) * 0.05
 STEP = 0.01
-SOFT_HIT_THR = 0.02
 F_UNSET = float("NaN")
 LEG_ELLIPSE_A = 0.21
 LEG_ELLIPSE_B = 0.18

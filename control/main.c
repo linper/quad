@@ -5,47 +5,46 @@
  * @date 2023-02-04
  */
 
-#include <errno.h>
-#include <json-c/json_object.h>
-#include <json-c/json_types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/un.h>
+#include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/stat.h>
+#include <signal.h>
 
-#include <readline/readline.h>
-#include <readline/history.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+/*#include <sys/un.h>*/
+
+/*#include <readline/readline.h>*/
+/*#include <readline/history.h>*/
+#include <json-c/json_object.h>
+#include <json-c/json_types.h>
 
 #include "log.h"
 #include "mth.h"
 #include "model.h"
 #include "matrix.h"
+#include "req.h"
 #include "ipc.h"
 
 #define CTL_VER "3.0"
 
-#define EMPTY_DATA "empty"
-#define REQ_FMT "{\"act\": \"%s\", \"data\": \"%s\"}\n"
-#define SETUP_REQ "{\"act\": \"setup\", \"data\": \"empty\"}\n"
-#define MODEL_REQ "{\"act\": \"model\", \"data\": \"empty\"}\n"
-#define SENS_REQ "{\"act\": \"sens\", \"data\": \"empty\"}\n"
-#define STEP_REQ "{\"act\": \"step\", \"data\": {\"angles\": %s}}\n"
-
-#define STEP_ACT "step"
-#define SETUP_ACT "setup"
-#define MODEL_ACT "model"
-#define SENS_ACT "sens"
-#define ACT_LABEL "act"
-#define DATA_LABEL "data"
-#define ANGLES_LABEL "angles"
-
 int quiet = 0;
 int debug = 0;
+
+static volatile int got_msg = 0;
+
+static void sig_msg(int signo)
+{
+	(void)signo;
+
+	printf("GOT SIGNAL:%d\n", signo);
+
+	got_msg = 1;
+}
 
 static void help()
 {
@@ -64,77 +63,23 @@ Usage: contol [OPTION...]\n\
  * @param[in] *string string to strip
  * @return pointer into string.
  */
-static char *stripwhite(char *string)
-{
-	register char *s, *t;
+/*static char *stripwhite(char *string)*/
+/*{*/
+/*register char *s, *t;*/
 
-	for (s = string; whitespace(*s); s++)
-		;
+/*for (s = string; whitespace(*s); s++)*/
+/*;*/
 
-	if (*s == 0)
-		return (s);
+/*if (*s == 0)*/
+/*return (s);*/
 
-	t = s + strlen(s) - 1;
-	while (t > s && whitespace(*t))
-		t--;
-	*++t = '\0';
+/*t = s + strlen(s) - 1;*/
+/*while (t > s && whitespace(*t))*/
+/*t--;*/
+/**++t = '\0';*/
 
-	return s;
-}
-
-static int make_model_request(struct json_object **j)
-{
-	json_object *d;
-
-	get_request_template(MODEL_ACT, j, &d);
-	if (!*j) {
-		ERR(ERR_ERROR);
-		return 1;
-	}
-
-	return ipc_conn_request(CONN_ADDR_SIM, j, IPC_BUF_LEN);
-}
-
-static int make_sens_request(struct json_object **j)
-{
-	json_object *d;
-
-	get_request_template(SENS_ACT, j, &d);
-	if (!g_model || !*j) {
-		ERR(ERR_ERROR);
-		return 1;
-	}
-
-	return ipc_conn_request(CONN_ADDR_SIM, j, IPC_BUF_LEN);
-}
-
-static int make_setup_request()
-{
-	struct json_object *j, *d;
-
-	get_request_template(SETUP_ACT, &j, &d);
-	if (!j) {
-		ERR(ERR_ERROR);
-		return 1;
-	}
-
-	return ipc_conn_request(CONN_ADDR_SIM, &j, IPC_BUF_LEN);
-}
-
-static int make_step_request(struct json_object **j)
-{
-	json_object *d;
-
-	get_request_template(STEP_ACT, j, &d);
-	if (!g_model || !*j) {
-		ERR(ERR_ERROR);
-		return 1;
-	}
-
-	json_object_object_add(d, ANGLES_LABEL, mat_to_json(g_model->angles));
-
-	return ipc_conn_request(CONN_ADDR_SIM, j, IPC_BUF_LEN);
-}
+/*return s;*/
+/*}*/
 
 /**
  * @brief It does exactly that what it is called.
@@ -182,7 +127,7 @@ static int make_step_request(struct json_object **j)
 /*free(line_act);*/
 /*free(line_data);*/
 
-/*if (ipc_conn_request(CONN_ADDR_SIM, buf, IPC_BUF_LEN)) {*/
+/*if (ipc_conn_request(CONN_ADDR_SIM, buf)) {*/
 /*ERR("Failed to request\n");*/
 /*continue;*/
 /*}*/
@@ -202,13 +147,13 @@ static int start_sim()
 	struct json_object *j;
 
 	DBG("SETTING UP...\n");
-	if (make_setup_request()) {
+	if (req_setup()) {
 		ERR("Setting up failed\n");
 		return 1;
 	}
 
 	DBG("GETTING MODEL...\n");
-	if (make_model_request(&j)) {
+	if (req_model(&j)) {
 		ERR("Geting model failed\n");
 		return 1;
 	}
@@ -222,13 +167,14 @@ static int start_sim()
 	json_object_put(j);
 
 	DBG("GETTING SENS...\n");
-	if (make_sens_request(&j)) {
+	if (req_sens(&j)) {
 		ERR("Getting sensor info failed\n");
 		return 1;
 	}
 
 	DBG("PARSING SENS...\n");
 	if (set_sens_from_json(j)) {
+		g_model->sens = NULL;
 		ERR("Parsing sens failed\n");
 		return 1;
 	}
@@ -247,15 +193,19 @@ static int main_loop()
 	struct json_object *j;
 
 	for (;;) {
-		// Check and handle IO
 		// Calc next step
-		// Send current state to `view`
-		// Get angles
-		model_get_angles();
+		model_step();
 		// Make `step` request to `sim` and save response
-		make_step_request(&j);
+		req_step(&j);
 		// Update sensors
+		set_sens_from_json(j);
 		json_object_put(j);
+
+		// Check and handle AIO
+		if (got_msg) {
+			got_msg = 0;
+			process_async();
+		}
 	}
 
 	return 0;
@@ -294,6 +244,10 @@ int main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 	}
+
+	signal(SIGIO, sig_msg);
+
+	json_c_set_serialization_double_format("%.5g", JSON_C_OPTION_THREAD);
 
 	if (ipc_setup()) {
 		FATAL("Failed to setup IPC\n");

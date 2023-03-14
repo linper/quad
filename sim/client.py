@@ -5,11 +5,11 @@ import os
 
 
 # SIM_VIEW_PIPE = "/tmp/sim_view_pipe"
-SIM_CTL_PIPE = "/tmp/sim_ctl_pipe"
-CTL_SIM_PIPE = "/tmp/ctl_sim_pipe"
+AUX_CTL_PIPE = "/tmp/aux_ctl_pipe"
+CTL_AUX_PIPE = "/tmp/ctl_aux_pipe"
 
-fifo_out = os.open(CTL_SIM_PIPE, os.O_RDWR)
-fifo_in = os.open(SIM_CTL_PIPE, os.O_RDWR)
+fifo_out = os.open(AUX_CTL_PIPE, os.O_WRONLY)
+fifo_in = os.open(CTL_AUX_PIPE, os.O_RDWR)
 
 while True:
     print("act > ", end="")

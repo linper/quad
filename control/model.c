@@ -6,13 +6,13 @@
  * @date 2023-02-04
  */
 
+#include <balance.h>
 #include <json-c/json_types.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdbool.h>
 
 #include <json-c/json_object.h>
 #include <json-c/json_tokener.h>
@@ -33,11 +33,14 @@ model_t *g_model = NULL;
 static void free_sens(sens_t *s)
 {
 	if (s) {
+		mat_free(s->balance);
+		mat_free(s->touch_f);
+		mat_free(s->damp);
 		mat_free(s->bf_vec);
 		mat_free(s->bfo_mat);
-		mat_free(s->damp);
 		mat_free(s->tf_pos);
-		mat_free(s->touch_f);
+		/*mat_free(s->s_center);*/
+		/*mat_free(s->to_s_closest);*/
 		free(s);
 	}
 }
@@ -54,6 +57,7 @@ static void free_leg(leg_t *l)
 		mat_free(l->base_off);
 		mat_free(l->dir);
 		mat_free(l->joint_lims);
+		fsm_free(l->fsm);
 		free(l);
 	}
 }
@@ -69,11 +73,12 @@ static sens_t *alloc_sens()
 		FATAL(ERR_MALLOC_FAIL);
 	}
 
-	s->touch_f = mat_create(1, 4, true);
-	s->damp = mat_create(1, 4, true);
-	s->bf_vec = mat_create(1, 3, true);
-	s->bfo_mat = mat_create(3, 3, true);
-	s->tf_pos = mat_create(1, 3, true);
+	s->balance = mat_create(4, 3);
+	s->touch_f = mat_create(1, 4);
+	s->damp = mat_create(1, 4);
+	s->bf_vec = mat_create(1, 3);
+	s->bfo_mat = mat_create(3, 3);
+	s->tf_pos = mat_create(1, 3);
 
 	if (!s->touch_f || !s->damp || !s->bf_vec || !s->bfo_mat || !s->tf_pos) {
 		ERR(ERR_PARSE_FAIL);
@@ -84,15 +89,15 @@ static sens_t *alloc_sens()
 	return s;
 }
 
-int set_sens_from_json(struct json_object *j)
+int set_sens_from_json(struct json_object *js)
 {
 	float tf[4], d[4], bv[3], bm[9], tfp[3];
-	struct json_object *tmp, *tmp2, *arr;
+	struct json_object *rsp, *tmp, *tmp2, *arr;
 	int ret = 0;
 	bool has_sens;
 	sens_t *s;
 
-	if (!j || !g_model) {
+	if (!js || !g_model) {
 		return 1;
 	}
 
@@ -107,15 +112,27 @@ int set_sens_from_json(struct json_object *j)
 
 	s = g_model->sens;
 
+	// Response
+	if (!json_object_object_get_ex(js, "rsp", &rsp)) {
+		goto err;
+	}
+
 	// Avg_leg_h
-	if (!json_object_object_get_ex(j, "avg_leg_h", &tmp)) {
+	if (!json_object_object_get_ex(rsp, "avg_leg_h", &tmp)) {
 		goto err;
 	}
 
 	s->avg_leg_h = json_object_get_double(tmp);
 
+	// Abs_std_leg_h
+	if (!json_object_object_get_ex(rsp, "abs_std_leg_h", &tmp)) {
+		goto err;
+	}
+
+	s->abs_std_leg_h = json_object_get_double(tmp);
+
 	// Touch_force
-	if (!json_object_object_get_ex(j, "touch_force", &arr)) {
+	if (!json_object_object_get_ex(rsp, "touch_force", &arr)) {
 		goto err;
 	}
 
@@ -127,7 +144,7 @@ int set_sens_from_json(struct json_object *j)
 	}
 
 	// Damp
-	if (!json_object_object_get_ex(j, "damp", &arr)) {
+	if (!json_object_object_get_ex(rsp, "damp", &arr)) {
 		goto err;
 	}
 
@@ -139,7 +156,7 @@ int set_sens_from_json(struct json_object *j)
 	}
 
 	// Bf_vvec
-	if (!json_object_object_get_ex(j, "bf_vec", &arr)) {
+	if (!json_object_object_get_ex(rsp, "bf_vec", &arr)) {
 		goto err;
 	}
 
@@ -151,7 +168,7 @@ int set_sens_from_json(struct json_object *j)
 	}
 
 	// Bfo_mat
-	if (!json_object_object_get_ex(j, "bfo_mat", &arr)) {
+	if (!json_object_object_get_ex(rsp, "bfo_mat", &arr)) {
 		goto err;
 	}
 
@@ -167,7 +184,7 @@ int set_sens_from_json(struct json_object *j)
 	}
 
 	// T_force
-	if (!json_object_object_get_ex(j, "t_force", &tmp2)) {
+	if (!json_object_object_get_ex(rsp, "t_force", &tmp2)) {
 		goto err;
 	}
 
@@ -199,8 +216,7 @@ int set_sens_from_json(struct json_object *j)
 
 		if (!s->touch_f || !s->damp || !s->bf_vec || !s->bfo_mat ||
 			!s->tf_pos) {
-			ERR(ERR_PARSE_FAIL);
-			free_sens(s);
+			goto err;
 		}
 	} else {
 		ret |= mat_update_array(s->touch_f, 4, tf);
@@ -210,8 +226,7 @@ int set_sens_from_json(struct json_object *j)
 		ret |= mat_update_array(s->tf_pos, 3, tfp);
 
 		if (ret) {
-			ERR(ERR_PARSE_FAIL);
-			free_sens(s);
+			goto err;
 		}
 	}
 
@@ -317,6 +332,7 @@ static leg_t *leg_from_json(struct json_object *j)
 		jl[i] = json_object_get_double(tmp);
 	}
 
+	l->bal = true;
 	l->pos = mat_from_array(1, 3, p);
 	l->def_pos = mat_from_array(1, 3, dp);
 	l->base_off = mat_from_array(1, 3, bo);
@@ -395,7 +411,7 @@ static void leg_get_angles(leg_t *l)
 	mat_free(tg_mat);
 }
 
-void model_get_angles()
+static void model_get_angles()
 {
 	leg_t *l;
 
@@ -406,11 +422,17 @@ void model_get_angles()
 	}
 }
 
+void model_step()
+{
+	model_get_angles();
+	calc_balance();
+}
+
 int model_from_json(struct json_object *j)
 {
 	model_t *mod;
 	leg_t *l;
-	struct json_object *tmp, *tmp2, *arr;
+	struct json_object *rsp, *tmp, *tmp2, *arr;
 
 	if (!j) {
 		ERR(ERR_INVALID_INPUT);
@@ -424,10 +446,36 @@ int model_from_json(struct json_object *j)
 
 	printf("MODEL:%s\n", json_object_get_string(j));
 
-	// Base
-	if (!json_object_object_get_ex(j, "base", &tmp2)) {
+	// Response
+	if (!json_object_object_get_ex(j, "rsp", &rsp)) {
 		goto err;
 	}
+
+	// Base
+	if (!json_object_object_get_ex(rsp, "base", &tmp2)) {
+		goto err;
+	}
+
+	// Min_walk_h
+	if (!json_object_object_get_ex(tmp2, "min_walk_h", &tmp)) {
+		goto err;
+	}
+
+	mod->min_walk_h = json_object_get_double(tmp);
+
+	// Max_walk_h
+	if (!json_object_object_get_ex(tmp2, "max_walk_h", &tmp)) {
+		goto err;
+	}
+
+	mod->max_walk_h = json_object_get_double(tmp);
+
+	// Min_dip
+	if (!json_object_object_get_ex(tmp2, "min_dip", &tmp)) {
+		goto err;
+	}
+
+	mod->min_dip = json_object_get_double(tmp);
 
 	// Max_dip
 	if (!json_object_object_get_ex(tmp2, "max_dip", &tmp)) {
@@ -456,6 +504,13 @@ int model_from_json(struct json_object *j)
 	}
 
 	mod->link_len = json_object_get_double(tmp);
+
+	// Soft hit treshold
+	if (!json_object_object_get_ex(tmp2, "soft_hit_thr", &tmp)) {
+		goto err;
+	}
+
+	mod->soft_hit_thr = json_object_get_double(tmp);
 
 	// Max_dip
 	if (!json_object_object_get_ex(tmp2, "max_dip", &tmp)) {
@@ -498,7 +553,7 @@ int model_from_json(struct json_object *j)
 	mod->link_len = json_object_get_double(tmp);
 
 	// Legs
-	if (!json_object_object_get_ex(j, "legs", &arr)) {
+	if (!json_object_object_get_ex(rsp, "legs", &arr)) {
 		goto err;
 	}
 
@@ -521,7 +576,7 @@ int model_from_json(struct json_object *j)
 		mod->cw_legs[i]->cw_next = mod->cw_legs[(i + 1) % N_LEGS];
 	}
 
-	mod->angles = mat_create(4, 3, true);
+	mod->angles = mat_create(4, 3);
 	if (!mod->angles) {
 		goto err;
 	}

@@ -155,7 +155,7 @@ class FSM:
             start.vel_ps = 0.0
             mid.vel_ps = get_d2_speed(start, mid)
             end.vel_ps = get_d2_speed(mid, end)
-            # self.leg.plan.log.points.append(end)
+# self.leg.plan.log.points.append(end)
 
             p.points.append(start)
             p.points.append(mid)
@@ -169,7 +169,7 @@ class FSM:
 
         if len(p.steps) > 0:
             # if p.step_idx < p.steps.size:
-            # global misc_data
+            #global misc_data
             # misc_data.append(p.steps[0].z)
 
             p.step()
@@ -178,8 +178,8 @@ class FSM:
             p.reset()
             self.info.walk_h = walk_h
 
-            # self.plot()
-            # self.next(FSMAction.STOP)
+# self.plot()
+# self.next(FSMAction.STOP)
             self.next(FSMAction.END)
 
     def act_descending(self):
@@ -195,7 +195,7 @@ class FSM:
             end = DestPoint(
                 np.copy(p.target.pos), np.array([0, F_UNSET, F_UNSET]), ts=p.target.ts)
 
-            # self.leg.plan.log.points.append(end)
+# self.leg.plan.log.points.append(end)
 
             mid_ts = round(start.ts + PRE_LAND_PT_TM_C *
                            (p.target.ts - start.ts))
