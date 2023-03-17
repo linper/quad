@@ -112,7 +112,7 @@ int req_step(struct json_object **j)
 		return 1;
 	}
 
-	json_object_object_add(d, ANGLES_LABEL, mat_to_json(g_model->angles));
+	json_object_object_add(d, ANGLES_LABEL, matrix_to_json(g_model->angles));
 
 	return ipc_conn_request(CONN_ADDR_SIM, j);
 }
@@ -141,9 +141,9 @@ static int rsp_vstep(ipc_conn_t *conn, struct json_object *jreq,
 	json_object_object_add(d, "leg_avg_h",
 						   json_object_new_double(g_model->sens->avg_leg_h));
 	json_object_object_add(d, "touch_force",
-						   mat_to_json(g_model->sens->touch_f));
-	json_object_object_add(d, "damp", mat_to_json(g_model->sens->touch_f));
-	json_object_object_add(d, "tf_pos", mat_to_json(g_model->sens->tf_pos));
+						   block_to_json(g_model->sens->touch_f));
+	json_object_object_add(d, "damp", block_to_json(g_model->sens->damp));
+	json_object_object_add(d, "tf_pos", vector_to_json(g_model->sens->tf_pos));
 	json_object_object_add(d, "tf_type",
 						   json_object_new_int(g_model->sens->tf_type));
 
@@ -154,8 +154,8 @@ static int rsp_vstep(ipc_conn_t *conn, struct json_object *jreq,
 		json_object_object_add(l, "bal", json_object_new_int(leg->bal));
 		json_object_object_add(l, "idx", json_object_new_int(leg->idx));
 		json_object_object_add(l, "name", json_object_new_string(leg->name));
-		json_object_object_add(l, "pos", mat_to_json(leg->pos));
-		json_object_object_add(l, "def_pos", mat_to_json(leg->def_pos));
+		json_object_object_add(l, "pos", vector_to_json(leg->pos));
+		json_object_object_add(l, "def_pos", vector_to_json(leg->def_pos));
 
 		json_object_array_put_idx(lgs, i, l);
 	}

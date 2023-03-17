@@ -10,7 +10,7 @@
 #include <log.h>
 #include <pidc.h>
 
-void pidc_set(pidc_t *self, float p, float i, float d, float dt)
+void pidc_set(pidc_t *self, double p, double i, double d, double dt)
 {
 	if (!self) {
 		FATAL(ERR_INVALID_INPUT);
@@ -25,9 +25,9 @@ void pidc_set(pidc_t *self, float p, float i, float d, float dt)
 	self->perr = 0.0;
 }
 
-float pidc_eval(pidc_t *self, float cur, float dest)
+double pidc_eval(pidc_t *self, double cur, double dest)
 {
-	float err, P, I, D, val;
+	double err, P, I, D, val;
 
 	err = dest - cur;
 	P = self->p * err;

@@ -7,12 +7,16 @@
  */
 
 #include <balance.h>
+#include <gsl/gsl_vector_double.h>
 #include <json-c/json_types.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <gsl/gsl_block_double.h>
+#include <gsl/gsl_matrix_double.h>
 
 #include <json-c/json_object.h>
 #include <json-c/json_tokener.h>
@@ -33,12 +37,12 @@ model_t *g_model = NULL;
 static void free_sens(sens_t *s)
 {
 	if (s) {
-		mat_free(s->balance);
-		mat_free(s->touch_f);
-		mat_free(s->damp);
-		mat_free(s->bf_vec);
-		mat_free(s->bfo_mat);
-		mat_free(s->tf_pos);
+		gsl_matrix_free(s->balance);
+		gsl_block_free(s->touch_f);
+		gsl_block_free(s->damp);
+		gsl_vector_free(s->bf_vec);
+		gsl_matrix_free(s->bfo_mat);
+		gsl_vector_free(s->tf_pos);
 		/*mat_free(s->s_center);*/
 		/*mat_free(s->to_s_closest);*/
 		free(s);
@@ -52,11 +56,12 @@ static void free_sens(sens_t *s)
 static void free_leg(leg_t *l)
 {
 	if (l) {
-		mat_free(l->pos);
-		mat_free(l->def_pos);
-		mat_free(l->base_off);
-		mat_free(l->dir);
-		mat_free(l->joint_lims);
+		gsl_vector_free(l->pos);
+		gsl_vector_free(l->def_pos);
+		gsl_vector_free(l->base_off);
+		gsl_vector_free(l->dir);
+		gsl_vector_free(l->joint_lims);
+		gsl_vector_free(l->angles);
 		fsm_free(l->fsm);
 		free(l);
 	}
@@ -73,12 +78,12 @@ static sens_t *alloc_sens()
 		FATAL(ERR_MALLOC_FAIL);
 	}
 
-	s->balance = mat_create(4, 3);
-	s->touch_f = mat_create(1, 4);
-	s->damp = mat_create(1, 4);
-	s->bf_vec = mat_create(1, 3);
-	s->bfo_mat = mat_create(3, 3);
-	s->tf_pos = mat_create(1, 3);
+	s->balance = gsl_matrix_calloc(4, 3);
+	s->bfo_mat = gsl_matrix_calloc(3, 3);
+	s->touch_f = gsl_block_calloc(4);
+	s->damp = gsl_block_calloc(4);
+	s->bf_vec = gsl_vector_calloc(3);
+	s->tf_pos = gsl_vector_calloc(3);
 
 	if (!s->touch_f || !s->damp || !s->bf_vec || !s->bfo_mat || !s->tf_pos) {
 		ERR(ERR_PARSE_FAIL);
@@ -91,7 +96,7 @@ static sens_t *alloc_sens()
 
 int set_sens_from_json(struct json_object *js)
 {
-	float tf[4], d[4], bv[3], bm[9], tfp[3];
+	double tf[4], d[4], bv[3], bm[9], tfp[3];
 	struct json_object *rsp, *tmp, *tmp2, *arr;
 	int ret = 0;
 	bool has_sens;
@@ -140,7 +145,7 @@ int set_sens_from_json(struct json_object *js)
 		if (!(tmp = json_object_array_get_idx(arr, i)))
 			goto err;
 
-		tf[i] = json_object_get_int(tmp);
+		tf[i] = json_object_get_double(tmp);
 	}
 
 	// Damp
@@ -208,22 +213,22 @@ int set_sens_from_json(struct json_object *js)
 	}
 
 	if (!has_sens) {
-		s->touch_f = mat_from_array(1, 4, tf);
-		s->damp = mat_from_array(1, 4, d);
-		s->bf_vec = mat_from_array(1, 3, bv);
-		s->bfo_mat = mat_from_array(3, 3, bm);
-		s->tf_pos = mat_from_array(1, 3, tfp);
+		s->touch_f = block_from_array(4, tf);
+		s->damp = block_from_array(4, d);
+		s->bf_vec = vector_from_array(3, bv);
+		s->bfo_mat = matrix_from_array(3, 3, bm);
+		s->tf_pos = vector_from_array(3, tfp);
 
 		if (!s->touch_f || !s->damp || !s->bf_vec || !s->bfo_mat ||
 			!s->tf_pos) {
 			goto err;
 		}
 	} else {
-		ret |= mat_update_array(s->touch_f, 4, tf);
-		ret |= mat_update_array(s->damp, 4, d);
-		ret |= mat_update_array(s->bf_vec, 3, bv);
-		ret |= mat_update_array(s->bfo_mat, 9, bm);
-		ret |= mat_update_array(s->tf_pos, 3, tfp);
+		ret |= block_update_array(s->touch_f, 4, tf);
+		ret |= block_update_array(s->damp, 4, d);
+		ret |= vector_update_array(s->bf_vec, 3, bv);
+		ret |= matrix_update_array(s->bfo_mat, 3, 3, bm);
+		ret |= vector_update_array(s->tf_pos, 3, tfp);
 
 		if (ret) {
 			goto err;
@@ -246,7 +251,7 @@ err:
 static leg_t *leg_from_json(struct json_object *j)
 {
 	leg_t *l = NULL;
-	float p[3], dp[3], bo[3], d[3], jl[6];
+	double p[3], dp[3], bo[3], d[3], jl[6];
 	struct json_object *tmp, *arr;
 
 	if (!j) {
@@ -333,11 +338,12 @@ static leg_t *leg_from_json(struct json_object *j)
 	}
 
 	l->bal = true;
-	l->pos = mat_from_array(1, 3, p);
-	l->def_pos = mat_from_array(1, 3, dp);
-	l->base_off = mat_from_array(1, 3, bo);
-	l->dir = mat_from_array(1, 3, d);
-	l->joint_lims = mat_from_array(1, 6, jl);
+	l->pos = vector_from_array(3, p);
+	l->def_pos = vector_from_array(3, dp);
+	l->base_off = vector_from_array(3, bo);
+	l->dir = vector_from_array(3, d);
+	l->joint_lims = vector_from_array(6, jl);
+	l->angles = gsl_vector_calloc(3);
 
 	if (!l->pos || !l->def_pos || !l->base_off || !l->dir || !l->joint_lims) {
 		goto err;
@@ -358,57 +364,65 @@ err:
  */
 static void leg_get_angles(leg_t *l)
 {
-	float *dir, *lims, *target, gama, leg_len, max_leg_len, min_leg_len, e,
-		alpha, theta, phi, beta;
-	mat_t *tg_mat;
+	double gama, leg_len, max_leg_len, min_leg_len, e, alpha, theta, phi, beta;
+	gsl_vector *target, *lims, *dir;
 
-	tg_mat = mat_sub_n(l->pos, l->base_off);
-	target = tg_mat->arr;
-	lims = l->joint_lims->arr;
-	dir = l->dir->arr;
+	target = vector_sub_n(l->pos, l->base_off);
+	lims = l->joint_lims;
+	dir = l->dir;
 
-	gama = atan(-target[1] / target[2]);
-	if (lims[0] > gama) {
-		target[1] = -target[2] * tanf(gama);
-	} else if (lims[1] < gama) {
-		gama = lims[1];
-		target[1] = -target[2] * tanf(gama);
+	gama = atan(-gsl_vector_get(target, 1) / gsl_vector_get(target, 2));
+	if (gsl_vector_get(lims, 0) > gama) {
+		gama = gsl_vector_get(lims, 0);
+		gsl_vector_set(target, 1, -gsl_vector_get(target, 2) * tanf(gama));
+	} else if (gsl_vector_get(lims, 1) < gama) {
+		gama = gsl_vector_get(lims, 1);
+		gsl_vector_set(target, 1, -gsl_vector_get(target, 2) * tanf(gama));
 	}
 	// Substract shoulder position
-	target[1] -= 0.03 * sin(gama) + dir[2] * 0.01 * cos(gama);
-	target[2] -= -0.03 * cos(gama) + dir[2] * 0.01 * sin(gama);
+	gsl_vector_set(
+		target, 1,
+		gsl_vector_get(target, 1) -
+			(0.03 * sin(gama) + gsl_vector_get(dir, 2) * 0.01 * cos(gama)));
+	gsl_vector_set(
+		target, 2,
+		gsl_vector_get(target, 2) -
+			(-0.03 * cos(gama) + gsl_vector_get(dir, 2) * 0.01 * sin(gama)));
 
-	leg_len = mat_length(tg_mat);
-	max_leg_len = g_model->link_len * sqrt(5 - 4 * cos(fabs(lims[5])));
-	min_leg_len = g_model->link_len * sqrt(5 - 4 * cos(fabs(lims[4])));
+	leg_len = vector_length(target);
+	max_leg_len =
+		g_model->link_len * sqrt(5 - 4 * cos(fabs(gsl_vector_get(lims, 5))));
+	min_leg_len =
+		g_model->link_len * sqrt(5 - 4 * cos(fabs(gsl_vector_get(lims, 4))));
 
 	if (max_leg_len > leg_len && leg_len > min_leg_len) { // middle
 		e = acos(1.25 - ((leg_len * leg_len) /
 						 (4 * g_model->link_len * g_model->link_len)));
-		alpha = dir[0] * (M_PI - e);
+		alpha = gsl_vector_get(dir, 0) * (M_PI - e);
 	} else if (leg_len >= max_leg_len) { // outer
-		alpha = lims[4];
+		alpha = gsl_vector_get(lims, 4);
 	} else { // inner
-		alpha = lims[5];
+		alpha = gsl_vector_get(lims, 5);
 	}
 
-	phi = asin(target[0] / leg_len);
+	phi = asin(gsl_vector_get(target, 0) / leg_len);
 	theta =
 		asin(bound_data((g_model->link_len * sin(alpha)) / leg_len, -1.0, 1.0));
 
-	if (lims[2] <= -phi - theta && -phi - theta <= lims[3]) {
+	if (gsl_vector_get(lims, 2) <= -phi - theta &&
+		-phi - theta <= gsl_vector_get(lims, 3)) {
 		beta = -phi + -theta; // VII
-	} else if (lims[2] > -phi - theta) {
-		beta = lims[2]; // VIII
+	} else if (gsl_vector_get(lims, 2) > -phi - theta) {
+		beta = gsl_vector_get(lims, 2); // VIII
 	} else {
-		beta = lims[3];
+		beta = gsl_vector_get(lims, 3);
 	}
 
-	l->angles[0] = alpha;
-	l->angles[1] = beta;
-	l->angles[2] = gama;
+	gsl_vector_set(l->angles, 0, alpha);
+	gsl_vector_set(l->angles, 1, beta);
+	gsl_vector_set(l->angles, 2, gama);
 
-	mat_free(tg_mat);
+	gsl_vector_free(target);
 }
 
 static void model_get_angles()
@@ -418,14 +432,14 @@ static void model_get_angles()
 	for (int i = 0; i < N_LEGS; i++) {
 		l = g_model->legs[i];
 		leg_get_angles(l);
-		mat_set_row(g_model->angles, l->angles, i);
+		gsl_matrix_set_row(g_model->angles, i, l->angles);
 	}
 }
 
 void model_step()
 {
 	model_get_angles();
-	calc_balance();
+	/*calc_balance();*/
 }
 
 int model_from_json(struct json_object *j)
@@ -576,7 +590,7 @@ int model_from_json(struct json_object *j)
 		mod->cw_legs[i]->cw_next = mod->cw_legs[(i + 1) % N_LEGS];
 	}
 
-	mod->angles = mat_create(4, 3);
+	mod->angles = gsl_matrix_calloc(4, 3);
 	if (!mod->angles) {
 		goto err;
 	}
@@ -599,7 +613,7 @@ void free_model(model_t *mod)
 			free_leg(mod->legs[i]);
 		}
 
-		mat_free(mod->angles);
+		gsl_matrix_free(mod->angles);
 		free(mod);
 	}
 }

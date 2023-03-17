@@ -55,7 +55,7 @@ static int fill_diffs(plan_t *p, glist_t *lst)
 {
 	mat_t *time_steps, *data_x, *data_y, *data_z, *dx, *dy, *dz;
 	dpt_t *d;
-	float vel[3];
+	double vel[3];
 
 	time_steps = mat_create_ext(1, lst->count, false, p->stash);
 	data_x = mat_create_ext(1, lst->count, false, p->stash);
@@ -76,7 +76,7 @@ static int fill_diffs(plan_t *p, glist_t *lst)
 
 	for (size_t i = 0; i < lst->count; i++) {
 		d = lst->array[i];
-		memcpy(vel, d->vel, 3 * sizeof(float));
+		memcpy(vel, d->vel, 3 * sizeof(double));
 
 		if (vel[0] == NAN) {
 			vel[0] = dx->arr[i];
@@ -96,9 +96,9 @@ static int fill_diffs(plan_t *p, glist_t *lst)
 	return 0;
 }
 
-static float get_d2_speed(dpt_t *d1, dpt_t *d2)
+static double get_d2_speed(dpt_t *d1, dpt_t *d2)
 {
-	float vel, S;
+	double vel, S;
 	mat_t *d;
 
 	d = mat_sub_n(d2->pos, d1->pos);
@@ -112,7 +112,7 @@ static int gradual_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, mat_t **dists_p,
 						 mat_t **vels_ps_p)
 {
 	mat_t *dists, *vels_ps;
-	float tm_sum = 0.0, prev_v = 0.0;
+	double tm_sum = 0.0, prev_v = 0.0;
 
 	if (!p || !d1 || !d2 || !dists_p || !vels_ps_p) {
 		return 1;
@@ -137,7 +137,7 @@ static int variable_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, mat_t **dists_p,
 						  mat_t **vels_ps_p)
 {
 	mat_t *dists, *vels_ps, *tmp_m;
-	float S_dif, sp_top, inc, sum = 0.0, tm_sum = 0.0, prev_v = 0.0;
+	double S_dif, sp_top, inc, sum = 0.0, tm_sum = 0.0, prev_v = 0.0;
 	int t_dt;
 
 	if (!p || !d1 || !d2 || !dists_p || !vels_ps_p) {
@@ -178,15 +178,15 @@ static int variable_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, mat_t **dists_p,
 
 static int act_ascending(fsm_t *fsm)
 {
-	const float TOP_TM_C = 0.4;
-	const float MID_PT_HT_C = 0.75;
-	const float END_OF_C = 0.5;
-	const float MID_OF_C = 0.25;
+	const double TOP_TM_C = 0.4;
+	const double MID_PT_HT_C = 0.75;
+	const double END_OF_C = 0.5;
+	const double MID_OF_C = 0.25;
 
 	leg_t *l = (leg_t *)fsm->priv;
 	plan_t *p = &l->plan;
 
-	float dx, dy, step_dist, end_ts, end_vel[3] = { NAN, NAN, 0.0 },
+	double dx, dy, step_dist, end_ts, end_vel[3] = { NAN, NAN, 0.0 },
 									 unset[3] = { NAN, NAN, NAN }, *walk_h;
 	dpt_t *start, *end, *mid;
 
@@ -204,12 +204,12 @@ static int act_ascending(fsm_t *fsm)
 		walk_h[l->idx] =
 			get_walk_height(step_dist, g_model->sens->abs_std_leg_h);
 
-		float end_pos[3] = { *start->x + END_OF_C * (*p->target->x - *start->x),
+		double end_pos[3] = { *start->x + END_OF_C * (*p->target->x - *start->x),
 							 *start->y + END_OF_C * (*p->target->y - *start->y),
 							 walk_h[l->idx] };
 		end = dpt_new(end_pos, end_vel, p->target->ts, 0.0, p->stash);
 
-		float mid_pos[3] = { *start->x + MID_OF_C * (*p->target->x - *start->x),
+		double mid_pos[3] = { *start->x + MID_OF_C * (*p->target->x - *start->x),
 							 *start->y + MID_OF_C * (*p->target->y - *start->y),
 							 *start->z +
 								 MID_PT_HT_C * (walk_h[l->idx] - *start->z) };
@@ -235,7 +235,7 @@ static int act_ascending(fsm_t *fsm)
 		plan_step_one(p);
 	} else {
 		/* TODO: commenting these may break something <26-02-23, yourname> */
-		/* float wh = self.info.walk_h*/
+		/* double wh = self.info.walk_h*/
 		plan_reset(p);
 		/*self.info.walk_h = wh*/
 	}
@@ -245,13 +245,13 @@ static int act_ascending(fsm_t *fsm)
 
 static int act_descending(fsm_t *fsm)
 {
-	const float HT_C = 0.2;
-	const float OF_C = 0.96;
-	const float TM_C = 0.7;
+	const double HT_C = 0.2;
+	const double OF_C = 0.96;
+	const double TM_C = 0.7;
 
 	leg_t *l = (leg_t *)fsm->priv;
 	plan_t *p = &l->plan;
-	float mid_ts, end_vel[3] = { 0.0, NAN, NAN }, unset[3] = { NAN, NAN, NAN };
+	double mid_ts, end_vel[3] = { 0.0, NAN, NAN }, unset[3] = { NAN, NAN, NAN };
 	dpt_t *start, *end, *mid;
 
 	if (p->need_plan) {
@@ -265,7 +265,7 @@ static int act_descending(fsm_t *fsm)
 
 		mid_ts = roundf(start->ts + TM_C * (p->target->ts - start->ts));
 
-		float mid_pos[3] = { *start->x + OF_C * (*p->target->x - *start->x),
+		double mid_pos[3] = { *start->x + OF_C * (*p->target->x - *start->x),
 							 *start->y + OF_C * (*p->target->y - *start->y),
 							 *end->z + HT_C * (g_model->sens->walk_h[l->idx] -
 											   *end->z) };
@@ -303,7 +303,7 @@ static int act_traversing(fsm_t *fsm)
 {
 	leg_t *l = (leg_t *)fsm->priv;
 	plan_t *p = &l->plan;
-	float empty[3] = { 0 };
+	double empty[3] = { 0 };
 
 	if (p->need_plan) {
 		DBG("%s: Traversing\n", l->name);
@@ -411,7 +411,7 @@ static uint32_t lfsm_states[LFSMA_MAX][LFSMS_MAX] = {
 	},
 };
 
-dpt_t *dpt_new(const float pos[3], const float vel[3], unsigned ts, float vps,
+dpt_t *dpt_new(const double pos[3], const double vel[3], unsigned ts, double vps,
 			   stash_t *stash)
 {
 	dpt_t *p;
@@ -445,7 +445,7 @@ plan_t *plan_new(plan_t *p)
 {
 	dpt_t *st_p;
 	stash_t *s;
-	float empty[3] = { 0 };
+	double empty[3] = { 0 };
 	leg_t *l = container_of(p, leg_t, plan);
 
 	s = stash_new();
@@ -504,8 +504,8 @@ void plan_adjust(plan_t *self, mat_t *adj)
 {
 	mat_t *new_adj = mat_add_n(self->adj, adj);
 
-	float cur_z = *self->cur->z;
-	float d_adj = new_adj->arr[2] + cur_z;
+	double cur_z = *self->cur->z;
+	double d_adj = new_adj->arr[2] + cur_z;
 
 	if (d_adj < g_model->max_dip) {
 		new_adj->arr[2] = g_model->max_dip - cur_z;
@@ -546,7 +546,7 @@ void plan_make_steps(plan_t *self)
 	/*mat_t *tpts, *data_x, *data_y, *data_z, *data_dx, *data_dy, *data_dz, *dx,*/
 		/**dy, *dz, *ts_connected;*/
 	/*dpt_t *d;*/
-	/*float vel[3];*/
+	/*double vel[3];*/
 
 	/*tpts = mat_create_ext(1, self->pts->count, false, self->stash);*/
 	/*data_x = mat_create_ext(1, self->pts->count, false, self->stash);*/

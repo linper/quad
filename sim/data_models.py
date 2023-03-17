@@ -5,7 +5,7 @@ from enum import IntEnum
 import math
 import functools
 from numba import njit
-from consts import cw_seq, LEG_TAR_H, MAX_DIP, MIN_DIP, T_RAD
+from consts import cw_seq, LEG_TAR_H, MAX_DIP, MIN_DIP, T_RAD, MAX_WALK_H, MIN_WALK_H, SOFT_HIT_THR
 
 
 @njit

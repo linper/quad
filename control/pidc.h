@@ -8,14 +8,14 @@
 #pragma once
 
 typedef struct pidc {
-	float p;
-	float i;
-	float d;
-	float dt;
-	float it;
-	float perr;
+	double p;
+	double i;
+	double d;
+	double dt;
+	double it;
+	double perr;
 } pidc_t;
 
-void pidc_set(pidc_t *self, float p, float i, float d, float dt);
+void pidc_set(pidc_t *self, double p, double i, double d, double dt);
 
-float pidc_eval(pidc_t *self, float cur, float dest);
+double pidc_eval(pidc_t *self, double cur, double dest);
