@@ -43,12 +43,7 @@ typedef struct glist {
  * and highier than 0, if not defaults to 16
  * @return Pointer to created glist struct if successful, NULL otherwise  
  */
-glist_t *glist_new_ext(int cap, stash_t *stash, enum gl_fl flags);
-
-inline glist_t *glist_new(int cap)
-{
-	return glist_new_ext(cap, NULL, GLF_NO_ST);
-}
+glist_t *glist_new(int cap);
 
 /**
  * @brief Cleares glist struct and and frees its entries by issuing

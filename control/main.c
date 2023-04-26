@@ -26,11 +26,16 @@
 #include "log.h"
 #include "mth.h"
 #include "model.h"
-#include "matrix.h"
 #include "req.h"
 #include "ipc.h"
 
 #define CTL_VER "3.0"
+
+static const char *model_str =
+	"{\"id\": -1, \"act\": \"model\", \"rsp\": {\"base\": {\"max_dip\": -0.35, \"min_dip\": -0.1, \"max_walk_h\": -0.13, \"min_walk_h\": -0.2, \"leg_tar_h\": -0.26, \"t_rad\": 0.012, \"cw\": [0, 1, 3, 2], \"link_len\": 0.1, \"soft_hit_thr\": 0.02}, \"legs\": [{\"name\": \"front_left\", \"idx\": 0, \"pos\": [-0.125, -0.1, -0.26], \"def_pos\": [-0.125, -0.1, -0.26], \"base_off\": [-0.125, -0.05, -0.03], \"dir\": [-1, 1, -1], \"joint_lims\": [-0.5236, 0.245, -1.309, 1.309, -0.5236, -2.618]}, {\"name\": \"front_right\", \"idx\": 1, \"pos\": [-0.125, 0.1, -0.26], \"def_pos\": [-0.125, 0.1, -0.26], \"base_off\": [-0.125, 0.05, -0.03], \"dir\": [-1, 1, 1], \"joint_lims\": [-0.245, 0.5236, -1.309, 1.309, -0.5236, -2.618]}, {\"name\": \"back_left\", \"idx\": 2, \"pos\": [0.125, -0.1, -0.26], \"def_pos\": [0.125, -0.1, -0.26], \"base_off\": [0.125, -0.05, -0.03], \"dir\": [-1, 1, -1], \"joint_lims\": [-0.5236, 0.245, -1.309, 1.309, -0.5236, -2.618]}, {\"name\": \"back_right\", \"idx\": 3, \"pos\": [0.125, 0.1, -0.26], \"def_pos\": [0.125, 0.1, -0.26], \"base_off\": [0.125, 0.05, -0.03], \"dir\": [-1, 1, 1], \"joint_lims\": [-0.245, 0.5236, -1.309, 1.309, -0.5236, -2.618]}]}, \"status\": 0}";
+
+static const char *sens_str =
+	"{\"id\": -1, \"act\": \"step\", \"rsp\": {\"avg_leg_h\": -0.26, \"touch_force\": [3, 13, -2, -2], \"abs_std_leg_h\": 0.0, \"damp\": [3.3617, 3.3446, 0.0542, 0.0539], \"bf_vec\": [1.1619, 0.0116, -4.1236], \"bfo_mat\": [[0.9975, 0.0001, -0.0709], [-0.0, 1.0, 0.0015], [0.0709, -0.0015, 0.9975]], \"t_force\": {\"type\": 1, \"pos\": [0.07326, 0.00073, -0.26]}}, \"status\": 0}";
 
 int quiet = 0;
 int debug = 0;
@@ -41,7 +46,7 @@ static void sig_msg(int signo)
 {
 	(void)signo;
 
-	printf("GOT SIGNAL:%d\n", signo);
+	DBG("GOT SIGNAL:%d\n", signo);
 
 	got_msg = 1;
 }
@@ -58,85 +63,42 @@ Usage: contol [OPTION...]\n\
 	puts(usage);
 }
 
-/**
- * @brief strip whitespace from the start and end of string.
- * @param[in] *string string to strip
- * @return pointer into string.
- */
-/*static char *stripwhite(char *string)*/
-/*{*/
-/*register char *s, *t;*/
+static int start_nosim()
+{
+	struct json_object *j;
 
-/*for (s = string; whitespace(*s); s++)*/
-/*;*/
+	DBG("PARSING MODEL...\n");
+	j = json_tokener_parse(model_str);
+	if (!j) {
+		ERR("Parsing model string failed\n");
+		return 1;
+	}
 
-/*if (*s == 0)*/
-/*return (s);*/
+	if (model_from_json(j)) {
+		ERR("Parsing model failed\n");
+		json_object_put(j);
+		return 1;
+	}
 
-/*t = s + strlen(s) - 1;*/
-/*while (t > s && whitespace(*t))*/
-/*t--;*/
-/**++t = '\0';*/
+	json_object_put(j);
 
-/*return s;*/
-/*}*/
+	DBG("PARSING SENS...\n");
+	j = json_tokener_parse(sens_str);
+	if (!j) {
+		ERR("Parsing sens string failed\n");
+		return 1;
+	}
+	if (set_sens_from_json(j)) {
+		g_model->sens = NULL;
+		ERR("Parsing sens failed\n");
+		json_object_put(j);
+		return 1;
+	}
 
-/**
- * @brief It does exactly that what it is called.
- * @param[in, out] *buf 	Buffer pointer to read and write in IPC
- * @return 0 on succes, 1 otherwise.
- */
-/*static void interactive_loop(char *buf)*/
-/*{*/
-/*char *line_act, *line_data, *s_act, *s_data;*/
-/*json_object *j, *d;*/
+	json_object_put(j);
 
-/*for (;;) {*/
-/*if (!(line_act = readline("act > "))) {*/
-/*continue;*/
-/*}*/
-
-/*s_act = stripwhite(line_act);*/
-
-/*if (*s_act) {*/
-/*add_history(s_act);*/
-/*} else {*/
-/*s_act = EMPTY_DATA;*/
-/*}*/
-
-/*if (!strncmp(s_act, "quit", 4)) {*/
-/*free(line_act);*/
-/*break;*/
-/*}*/
-
-/*if (!(line_data = readline("data > "))) {*/
-/*free(line_act);*/
-/*continue;*/
-/*}*/
-
-/*s_data = stripwhite(line_data);*/
-
-/*if (*s_data) {*/
-/*add_history(s_data);*/
-/*} else {*/
-/*s_data = EMPTY_DATA;*/
-/*}*/
-
-/*sprintf(buf, REQ_FMT, s_act, s_data);*/
-
-/*free(line_act);*/
-/*free(line_data);*/
-
-/*if (ipc_conn_request(CONN_ADDR_SIM, buf)) {*/
-/*ERR("Failed to request\n");*/
-/*continue;*/
-/*}*/
-
-/*if (!strncmp(buf, "exit", 4)) {*/
-/*break;*/
-/*}*/
-/*}*/
-/*}*/
+	return 0;
+}
 
 /**
  * @brief This function starts `sim` and queries initial model data.
@@ -144,6 +106,12 @@ Usage: contol [OPTION...]\n\
  */
 static int start_sim()
 {
+#ifdef NOSIM
+	return start_nosim();
+#else
+	(void)start_nosim();
+#endif
+
 	struct json_object *j;
 
 	DBG("SETTING UP...\n");
@@ -161,6 +129,7 @@ static int start_sim()
 	DBG("PARSING MODEL...\n");
 	if (model_from_json(j)) {
 		ERR("Parsing model failed\n");
+		json_object_put(j);
 		return 1;
 	}
 
@@ -176,6 +145,7 @@ static int start_sim()
 	if (set_sens_from_json(j)) {
 		g_model->sens = NULL;
 		ERR("Parsing sens failed\n");
+		json_object_put(j);
 		return 1;
 	}
 
@@ -192,14 +162,22 @@ static int main_loop()
 {
 	struct json_object *j;
 
+	// Calc iinitial step
+	model_step();
+
 	for (;;) {
-		// Calc next step
-		model_step();
+#ifndef NOSIM
 		// Make `step` request to `sim` and save response
 		req_step(&j);
+#else
+		j = json_tokener_parse(sens_str);
+#endif
 		// Update sensors
 		set_sens_from_json(j);
 		json_object_put(j);
+
+		// Calc next step
+		model_step();
 
 		// Check and handle AIO
 		if (got_msg) {
@@ -249,9 +227,11 @@ int main(int argc, char *argv[])
 
 	json_c_set_serialization_double_format("%.5g", JSON_C_OPTION_THREAD);
 
+#ifndef NOSIM
 	if (ipc_setup()) {
 		FATAL("Failed to setup IPC\n");
 	}
+#endif
 
 	if (start_sim()) {
 		FATAL("Failed to start simulationi\n");

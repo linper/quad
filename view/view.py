@@ -95,6 +95,13 @@ class GoTask:
         self.exp_set: bool=False  # i.e. explicitly set
         self.dummy: bool=False
 
+    def to_json(self):
+        return {"idx": self.idx, 
+                "do_lift": self.do_lift,
+                "directions": self.direction.tolist(),
+                "n_points": len(self.points),
+                "points":[p.pos.tolist() for p in self.points]}
+
     def add_pt(self, pt: GoPoint):
         self.points.append(pt)
 
@@ -116,6 +123,11 @@ class GoCmd:
         self.tasks: list=tasks
         self.test_mode=False
 
+    def to_json(self):
+        tasks = [t.to_json() for t in self.tasks if len(t.points) > 0]
+        return {"test_mode":self.test_mode,
+                "n_tasks": len(tasks),
+                "tasks":tasks}
 
 class SPoint:
     def __init__(self, x, y, color):
@@ -150,7 +162,7 @@ class GrView:
         b.place(x = 0, y =self.height - 20)
         b= tk.Button(self.root, text = "Clear", command =self.send_clear_cmd)
         b.place(x = 0, y =self.height - 50)
-        b= tk.Button(self.root, text = "Start/Stop", command =self.on_plot_btn_clk)
+        b= tk.Button(self.root, text = "Start/Stop", command =self.on_pause_btn_clk)
         b.place(x = 0, y =self.height - 80)
         R1= tk.Radiobutton(self.root, text = "Set target", variable =self.sel_mode, value=0)
         R1.place(x = 0, y =self.height + 25)
@@ -355,9 +367,13 @@ class GrView:
 
         print("Go")
         self.__clear_dummies()
+        
+        json_str = json.dumps({"act":"go", "data":self.task_cmd.to_json()})
+        print(f"request:{json_str}")
         # saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
         # [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
         # self.q_to.put(self.task_cmd)
+        os.write(self.vc_fd, bytes(json_str + "\n", "utf-8"))
         for t in self.tasks:
             t.active = False
             t.dummy = True
@@ -383,7 +399,7 @@ class GrView:
 
         self.send_go_cmd()
 
-    def on_plot_btn_clk(self):
+    def on_pause_btn_clk(self):
         if self.running:
             print("stop")
             os.write(self.vc_fd, bytes(json.dumps({"act": "bye", "data": "empty"}), "utf-8"))
@@ -473,9 +489,9 @@ class GrView:
                         t.exp_set = False
 
     def on_got_msg(self, arg1, arg2):
-        print(f"GOT MSG {arg1} : {arg2}")
+        # print(f"GOT MSG {arg1} : {arg2}")
         msg = os.read(self.cv_fd, 2048)
-        print(f"msg: {msg}")
+        # print(f"msg: {msg}")
         try:
             json_msg = json.loads(msg)
         except:
@@ -496,9 +512,9 @@ class GrView:
             legs = [VLeg(l["bal"], l["idx"], l["name"], l["pos"], l["def_pos"]) for l in raw_legs]
             self.q = VQuad(legs, sens)
             self.update()
-            os.write(self.vc_fd, bytes(json.dumps({"act":"vstep", "data":{}}), "utf-8"))
-        elif act == "hello":
-            os.write(self.vc_fd, bytes(json.dumps({"act":"vstep", "data":{}}), "utf-8"))
+            os.write(self.vc_fd, bytes(json.dumps({"act":"vstep", "data":{}}) + "\n", "utf-8"))
+        elif act == "hello":                                                        
+            os.write(self.vc_fd, bytes(json.dumps({"act":"vstep", "data":{}}) + "\n", "utf-8"))
 
 
         # except Exception as e:

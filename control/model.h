@@ -16,13 +16,15 @@
 #include <gsl/gsl_vector_double.h>
 #include <gsl/gsl_matrix_double.h>
 
-#include "matrix.h"
-#include "fsm.h"
 #include "plan.h"
 #include "pidc.h"
 
 #define N_LEGS 4
 #define NAME_LEN 16
+
+//#ifdef NOSIM_DBG
+//#define NOSIM
+//#endif
 
 typedef struct leg leg_t;
 
@@ -36,7 +38,7 @@ typedef struct sens {
 	bool s_hit[4]; ///< 		Does leg hard hit
 	double damp_dst[4]; ///< 	1 - normalized damp
 	double walk_h[4]; ///<
-	gsl_matrix *balance; ///< 	Balanciing offsets (4 x 3)
+	gsl_block *balance; ///< 	Balanciing offsets (1 x 4)
 	gsl_block *touch_f; ///< 	Force that legs apply to ground (1 x 4)
 	gsl_block *damp; ///< 		Leg dampener distance (1 x 4) SHOULD NOT BE NEEDED
 	gsl_vector *bf_vec; ///< 	Base force vector (1 x 3)
@@ -54,7 +56,6 @@ typedef struct leg {
 	int idx; ///< 				NON-CW index of leg
 	char name[NAME_LEN]; ///< 	Name of leg
 	plan_t plan; ///< 			Leg movement plan.
-	fsm_t *fsm; ///< 			FSM of the leg.
 	pidc_t balance_pid; ///< 	Balancing PID controler.
 	pidc_t touch_pid; ///< 		Touch/contact PID controler.
 	bool bal; ///< 				Is this leg is currentry balanced
@@ -119,7 +120,7 @@ void model_step();
  * @param[in] 	*mod 	Model struct to free.
  * @return Nothing
  */
-void free_model(model_t *mod);
+void model_free(model_t *mod);
 
 extern model_t *g_model;
 

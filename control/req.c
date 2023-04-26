@@ -118,7 +118,7 @@ int req_step(struct json_object **j)
 }
 
 /**
- * @brief Funcion that adds aditional leg ingo to json object 
+ * @brief Funcion that adds aditional leg info to json object 
  * (in addition to sens info) and then notifies `view`.
  * Does not wait for response.
  * @return 0 on success, 1 - otherwise.
@@ -168,6 +168,79 @@ static int rsp_vstep(ipc_conn_t *conn, struct json_object *jreq,
 	return 0;
 }
 
+static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
+				  struct json_object **jrsp)
+{
+	(void)jrsp;
+	(void)conn;
+
+	int n_tasks, n_points, lidx;
+	double *pos_arr;
+	bool do_lift;
+
+	json_object *jtasks, *jtask, *jpts, *jpt, *tmp1;
+
+	if (!json_object_object_get_ex(jreq, "n_tasks", &tmp1))
+		goto err;
+
+	n_tasks = json_object_get_int(tmp1);
+
+	if (!json_object_object_get_ex(jreq, "tasks", &jtasks))
+		goto err;
+
+	for (int i = 0; i < n_tasks; i++) {
+		if (!(jtask = json_object_array_get_idx(jtasks, i)))
+			goto err;
+
+		if (!json_object_object_get_ex(jtask, "do_lift", &tmp1))
+			goto err;
+
+		do_lift= json_object_get_boolean(tmp1);
+
+		if (!json_object_object_get_ex(jtask, "idx", &tmp1))
+			goto err;
+
+		lidx = json_object_get_int(tmp1);
+
+		if (lidx < 0)
+			continue;
+
+		if (!json_object_object_get_ex(jtask, "n_points", &tmp1))
+			goto err;
+
+		n_points = json_object_get_int(tmp1);
+
+		pos_arr = malloc(3 * n_points * sizeof(double));
+		if (!pos_arr) {
+			FATAL(ERR_MALLOC_FAIL);
+		}
+
+		if (!json_object_object_get_ex(jtask, "points", &jpts))
+			goto err;
+
+		for (int j = 0; j < n_points; j++) {
+			if (!(jpt = json_object_array_get_idx(jpts, j)))
+				goto err;
+
+			pos_arr[3 * j + 0] =
+				json_object_get_double(json_object_array_get_idx(jpt, 0));
+			pos_arr[3 * j + 1] =
+				json_object_get_double(json_object_array_get_idx(jpt, 1));
+			pos_arr[3 * j + 2] =
+				json_object_get_double(json_object_array_get_idx(jpt, 2));
+		}
+
+		plan_make_movement(&g_model->legs[lidx]->plan, pos_arr, n_points, do_lift);
+		free(pos_arr);
+	}
+
+	return 0;
+err:
+
+	ERR("Parsing go command failed \n");
+	return 1;
+}
+
 static int rsp_hello(ipc_conn_t *conn, struct json_object *jreq,
 					 struct json_object **jrsp)
 {
@@ -204,6 +277,7 @@ static int rsp_bye(ipc_conn_t *conn, struct json_object *jreq,
 
 static struct cb_map func_map[] = {
 	{ .act = "vstep", .cb = rsp_vstep },
+	{ .act = "go", .cb = rsp_go },
 	{ .act = "hello", .cb = rsp_hello },
 	{ .act = "bye", .cb = rsp_bye },
 };
@@ -230,7 +304,7 @@ int exec_request(ipc_conn_t *conn, struct json_object *jreq,
 
 	for (size_t i = 0; i < ARRAY_SIZE(func_map); i++) {
 		if (!strcmp(func_map[i].act, act_str)) {
-			if (func_map[i].cb(conn, jreq, jrsp)) {
+			if (func_map[i].cb(conn, tmp, jrsp)) {
 				DBG("Failed to respond to :%s\n", act_str);
 			}
 			return 0;

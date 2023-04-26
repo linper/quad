@@ -154,11 +154,12 @@ static int fifo_conn_request(struct ipc_conn *self, char *buf, bool no_recv)
 static void fifo_conn_process_async(struct ipc_conn *self)
 {
 	int ret;
-	char buf[IPC_BUF_LEN];
+	char rbuf[IPC_BUF_LEN], wbuf[IPC_BUF_LEN], *bptr, *ptr;
 	const char *p;
-	struct json_object *jreq, *jres = NULL;
+	struct json_object *jreq, *jres;
 
-	buf[0] = 0;
+	rbuf[0] = 0;
+	bptr = rbuf;
 
 	if (!self || !self->priv) {
 		ERR(ERR_INVALID_INPUT);
@@ -168,7 +169,7 @@ static void fifo_conn_process_async(struct ipc_conn *self)
 	/*DBG("Path:%s\n", ((fifo_conn_t *)(self->priv))->in_path);*/
 	fifo_conn_t *c = (fifo_conn_t *)self->priv;
 
-	ret = read(c->in_fd, buf, IPC_BUF_LEN - 1);
+	ret = read(c->in_fd, rbuf, IPC_BUF_LEN - 1);
 	if (ret == -1) {
 		ERR(NLS, strerror(errno));
 		return;
@@ -176,38 +177,47 @@ static void fifo_conn_process_async(struct ipc_conn *self)
 		return;
 	}
 
-	buf[MIN(IPC_BUF_LEN - 1, (uint)ret)] = 0;
+	rbuf[MIN(IPC_BUF_LEN - 1, (uint)ret)] = 0;
 
-	DBG("Received[%d]:%s\n", ret, buf);
+	DBG("Received[%d]:%s\n", ret, rbuf);
+	/*if (strstr(rbuf, "\"go\"")) {*/
+		/*printf("whatever\n");*/
+	/*}*/
 
-	jreq = json_tokener_parse(buf);
-	if (!jreq) {
-		ERR(ERR_PARSE_FAIL);
-		return;
-	}
+	while ((ptr = strsep(&bptr, "\n"))) {
+		if (strlen(ptr) < 2) {
+			continue;
+		}
 
-	if (exec_request(self, jreq, &jres)) {
+		jreq = json_tokener_parse(ptr);
+		if (!jreq) {
+			ERR(ERR_PARSE_FAIL);
+			return;
+		}
+
+		jres = NULL;
+		if (exec_request(self, jreq, &jres)) {
+			json_object_put(jreq);
+			ERR(ERR_PARSE_FAIL);
+			return;
+		}
+
 		json_object_put(jreq);
-		ERR(ERR_PARSE_FAIL);
-		return;
+		if (!jres) {
+			continue;
+		}
+
+		p = json_object_to_json_string(jres);
+		strncpy(wbuf, p, IPC_BUF_LEN);
+		json_object_put(jres);
+
+		if (write(c->out_fd, wbuf, strlen(wbuf)) == -1) {
+			ERR(NLS, strerror(errno));
+			return;
+		}
+
+		DBG("Sent[%lu]:%s\n", strlen(wbuf), wbuf);
 	}
-
-	json_object_put(jreq);
-	if (!jres) {
-		return;
-	}
-
-	p = json_object_to_json_string(jres);
-	strncpy(buf, p, IPC_BUF_LEN);
-	json_object_put(jres);
-
-	if (write(c->out_fd, buf, strlen(buf)) == -1) {
-		ERR(NLS, strerror(errno));
-		return;
-	}
-
-	DBG("Sent[%lu]:%s\n", strlen(buf), buf);
-
 	return;
 }
 

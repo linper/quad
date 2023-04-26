@@ -53,12 +53,13 @@ class SensInfo:
     def __init__(self, q):
         self.host: Quad = q
         self.b_sensor_mass: float = p.getDynamicsInfo(q.model, q.sensor)[0]
-        self.avg_leg_h: float = LEG_TAR_H
-        self.abs_std_leg_h: float = 0.0
+        # self.avg_leg_h: float = LEG_TAR_H
+        # self.abs_std_leg_h: float = 0.0
         self.touch_force = np.zeros(4, dtype=int)
         self.damp = np.zeros(4, dtype=float)
         self.base_force_vector = np.zeros(3, dtype=float)
         self.bf_hist = [np.zeros(3, dtype=float)]
+        # self.bf_max = 15
         self.bf_max = 35
         self.base_orientation_matrix = np.zeros((3, 3), dtype=float)
         self.base_frame_orientation_matrix = np.zeros((3, 3), dtype=float)
@@ -72,10 +73,9 @@ class SensInfo:
 
     def get_json(self):
         return {
-            "avg_leg_h": round(self.avg_leg_h, 4),
+            # "avg_leg_h": round(self.avg_leg_h, 4),
+            # "abs_std_leg_h": self.abs_std_leg_h,
             "touch_force": self.touch_force.round(4).tolist(),
-            "abs_std_leg_h": self.abs_std_leg_h,
-            "avg_leg_h": self.avg_leg_h,
             "damp": self.damp.round(4).tolist(),
             "bf_vec": self.base_force_vector.round(4).tolist(),
             "bfo_mat": self.base_frame_orientation_matrix.round(4).tolist(),
@@ -217,12 +217,12 @@ class SensInfo:
         self.update_s()
 
         # average balanced leg height
-        ahl = [l.position[2] for l in self.host.legs if l.do_balance]
-        self.avg_leg_h = np.average(np.array(ahl)) if len(ahl) else MAX_DIP
+        # ahl = [l.position[2] for l in self.host.legs if l.do_balance]
+        # self.avg_leg_h = np.average(np.array(ahl)) if len(ahl) else MAX_DIP
 
         # absolute std of balanced leg heights
-        self.abs_std_leg_h = np.average(np.array(
-            [abs(l.position[2] - self.avg_leg_h) for l in self.host.legs if l.do_balance])) if len(ahl) else 0.0
+        # self.abs_std_leg_h = np.average(np.array(
+        # [abs(l.position[2] - self.avg_leg_h) for l in self.host.legs if l.do_balance])) if len(ahl) else 0.0
 
 
 class Leg:

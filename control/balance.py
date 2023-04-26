@@ -11,13 +11,10 @@ from numba import njit
 
 
 class BalanceAttrs(IntEnum):
-    HEIGHT = 0
-    LEAN = 1
-    IMP = 2
-    IMP_INV = 3
-    TOUCH = 4
-    DROP = 5
-    MAX = 6
+    IMP = 0
+    TOUCH = 1
+    DROP = 2
+    MAX = 3
 
 
 def get_importance(leg):
@@ -25,24 +22,21 @@ def get_importance(leg):
     x_pos.append(leg.body.sens_info.t_force_info.pos[0])
     min_x_pos = functools.reduce(lambda a, b: a if a < b else b, x_pos)
     max_x_pos = functools.reduce(lambda a, b: a if a > b else b, x_pos)
-    x_pos_diff = abs(max_x_pos - min_x_pos)
-    x_lever_inv = abs(
+    x_pos_diff = max_x_pos - min_x_pos
+    x_lever = abs(
         leg.position[0] - leg.body.sens_info.t_force_info.pos[0]) / x_pos_diff
-    x_lever = 1 / x_lever_inv
 
     y_pos = [l.position[1] for l in leg.body.legs if l.do_balance]
     y_pos.append(leg.body.sens_info.t_force_info.pos[1])
     min_y_pos = functools.reduce(lambda a, b: a if a < b else b, y_pos)
     max_y_pos = functools.reduce(lambda a, b: a if a > b else b, y_pos)
-    y_pos_diff = abs(max_y_pos - min_y_pos)
-    y_lever_inv = abs(
+    y_pos_diff = max_y_pos - min_y_pos
+    y_lever = abs(
         leg.position[1] - leg.body.sens_info.t_force_info.pos[1]) / y_pos_diff
-    y_lever = 1 / y_lever_inv
 
     leg_imp_share = x_lever * y_lever
-    leg_inv_imp_share = x_lever_inv * y_lever_inv
 
-    return leg_imp_share, leg_inv_imp_share
+    return leg_imp_share
 
 
 def get_lean_diff(leg):
@@ -123,21 +117,22 @@ def get_balance(leg):
 
             balance_diffs[BalanceAttrs.DROP,
                           i], balance_diffs[BalanceAttrs.TOUCH, i] = get_touch_diff(l)
-            balance_diffs[BalanceAttrs.LEAN, i] = get_lean_diff(l)
-            _, balance_diffs[BalanceAttrs.IMP_INV, i] = get_importance(l)
-            balance_diffs[BalanceAttrs.HEIGHT, i] = (
-                LEG_TAR_H - leg.body.sens_info.avg_leg_h)
+            balance_diffs[BalanceAttrs.IMP, i] = get_importance(l)
 
-            if balance_diffs[BalanceAttrs.IMP_INV][i] > 0.33:
-                balance_cache[i] += l.balance_pid.eval(
-                    balance_cache[i], balance_cache[i] + base_part[i])
+            balance_cache[i] = l.balance_pid.eval(
+                0.0, base_part[i])
+
+            if balance_diffs[BalanceAttrs.IMP][i] > 0.33:
                 balance_cache[i] += l.touch_pid.eval(
                     balance_cache[i], balance_cache[i])
             else:
-                balance_cache[i] += l.balance_pid.eval(
-                    balance_cache[i], balance_cache[i] + base_part[i])
                 balance_cache[i] += l.touch_pid.eval(
                     balance_cache[i], balance_cache[i] + TOUCH_COF * balance_diffs[BalanceAttrs.TOUCH][i] + balance_diffs[BalanceAttrs.DROP][i])
+
+        print(f"drop:{balance_diffs[BalanceAttrs.DROP]}")
+        print(f"touch:{balance_diffs[BalanceAttrs.TOUCH]}")
+        print(f"imp:{balance_diffs[BalanceAttrs.IMP]}")
+        print(f"final:{balance_cache}")
 
     balance_manager[leg.idx] = 1
 
@@ -145,7 +140,7 @@ def get_balance(leg):
 
 
 def get_walk_height(step_dist, abs_adj_h):
-    # acording to  0 < abs_adj_h < 0.1
+    # acording to 0 < abs_adj_h < 0.1
     aah_part = (-0.00088512 / (abs_adj_h + 0.0081818)) - 0.091818
     sd_part = (-0.018857 / (step_dist + 0.17143)) - 0.09
 

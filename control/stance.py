@@ -10,7 +10,6 @@ from numba import njit
 import matplotlib.pyplot as plt
 from interp import line_cof, get_mv_dot_product, get_2x2_rotation_matrix_from_angle, get_vectors_sine, get_vectors_cosine, get_vectors_angle, ellipse_line_intersect, ellipse_point_inside, vector_projection, strech_vector_to, xor, point_to_sect, area, is_inside, centroid_of_polygon, make_cw, is_inside2, gradual_speed_func, variable_speed_func, sect_triangle_intersect
 
-import wrapper as w
 from fsm import FSMState
 from plan import DestPoint, prepare_traversing_points, plan_steps, fill_diffs, line_pts_intersect_r2
 

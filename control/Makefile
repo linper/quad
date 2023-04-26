@@ -4,9 +4,12 @@ SRC = $(wildcard *.c)
 OBJ = $(patsubst %.c,%.o,$(SRC))
 
 #CFLAGS = -O0
-CFLAGS = -rdynamic -Og -g -Werror -Wall -Wextra -D_GNU_SOURCE -DHAVE_INLINE
+CFLAGS = -rdynamic -O0 -g -Werror -Wall -Wextra -D_GNU_SOURCE -DHAVE_INLINE
 #CFLAGS += -Wno-unused-function
-LDFLAGS += -lreadline -lm -ljson-c -lgsl -lgslcblas
+#CFLAGS += -DNOSIM
+LDFLAGS += -lreadline -lm -ljson-c
+LDFLAGS += -lgsl -lgslcblas
+#LDFLAGS += -I/home/archer/Local/gsl/ -L/home/archer/Local/gsl/.libs/gsl -L/home/archer/Local/gsl/cblas/.libs/gslcblas
 
 RM = rm -f
 

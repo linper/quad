@@ -51,7 +51,7 @@ typedef struct ipc_conn {
 int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 						bool no_recv);
 
-inline int ipc_conn_request(enum conn_addr addr, struct json_object **j)
+static inline int ipc_conn_request(enum conn_addr addr, struct json_object **j)
 {
 	return ipc_conn_request_ex(addr, j, false);
 }

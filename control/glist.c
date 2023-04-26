@@ -21,11 +21,7 @@
 static int extend_storage(glist_t *lst)
 {
 	void **new_array;
-	if (lst->stash && lst->flags & GLF_ARR_ST) {
-		new_array = STASH_ALLOC(lst->stash, lst->cap * 2 * sizeof(void *));
-	} else {
-		new_array = calloc(lst->cap * 2, sizeof(void *));
-	}
+	new_array = calloc(lst->cap * 2, sizeof(void *));
 
 	if (!new_array) {
 		FATAL(ERR_MALLOC_FAIL);
@@ -64,7 +60,7 @@ static int convert_index_glist(glist_t *lst, int *index)
 	return 0;
 }
 
-glist_t *glist_new_ext(int cap, stash_t *stash, enum gl_fl flags)
+glist_t *glist_new(int cap)
 {
 	void **array;
 	glist_t *lst;
@@ -73,29 +69,19 @@ glist_t *glist_new_ext(int cap, stash_t *stash, enum gl_fl flags)
 		cap = 16;
 	}
 
-	if (stash && flags & GLF_SELF_ST) {
-		lst = STASH_ALLOC(stash, sizeof(glist_t));
-	} else {
-		lst = calloc(1, sizeof(glist_t));
-		if (!lst) {
-			FATAL(ERR_MALLOC_FAIL);
-		}
+	lst = calloc(1, sizeof(glist_t));
+	if (!lst) {
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	lst->cap = cap;
 
-	if (stash && flags & GLF_ARR_ST) {
-		array = STASH_ALLOC(stash, cap * sizeof(void *));
-	} else {
-		array = calloc(cap, sizeof(void *));
-		if (!array) {
-			FATAL(ERR_MALLOC_FAIL);
-		}
+	array = calloc(cap, sizeof(void *));
+	if (!array) {
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	lst->array = array;
-	lst->stash = stash;
-	lst->flags = flags;
 
 	return lst;
 }
@@ -150,9 +136,9 @@ void glist_extend(glist_t *dst, glist_t *src)
 		extend_storage(dst);
 	}
 
-	memcpy(dst->array + dst->count, src->array, src->count);
-
-	dst->count += src->count;
+	for (size_t i = 0; i < src->count; ++i) {
+		dst->array[dst->count++] = src->array[i];
+	}
 }
 
 int glist_push(glist_t *lst, void *value)

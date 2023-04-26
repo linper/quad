@@ -80,7 +80,7 @@ int fsm_execute(fsm_t *self)
 		return 1;
 	}
 
-	self->cur = 0;
+	/*self->cur = 0;*/
 
 	int res = self->f_map[self->cur](self);
 

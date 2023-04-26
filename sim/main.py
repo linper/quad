@@ -63,7 +63,7 @@ def update_joints(data):
 
 def connect_pe():
     p.connect(p.GUI)
-    p.setTimeStep(1/50)
+    # p.setTimeStep(1/50)
     p.setRealTimeSimulation(0)
 
 
@@ -195,6 +195,7 @@ def api_setup(req, data):
     load_env()
     m = load_robot()
     q = build_model(m)
+    time.sleep(0.03)
 
     req.update(RES_OK)
 
@@ -214,13 +215,16 @@ def api_step(req, data):
         req.update(NO_DATA)
         return
 
-    p.stepSimulation()
-    q.sens_info.update()
-    update_joints(parsed_array)
+    for _ in range(1):
+        update_joints(parsed_array)
+        p.stepSimulation()
 
+    q.sens_info.update()
     req.update(RES_OK)
     req.update({"rsp": q.sens_info.get_json()})
-    time.sleep(0.03)
+    # time.sleep(0.02)
+    # time.sleep(0.015)
+    time.sleep(0.007)
 
 
 def api_echo(req, data):

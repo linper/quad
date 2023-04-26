@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include "matrix.h"
-
-float get_walk_height(float step_dist, float abs_adj_h);
+double get_walk_height(double step_dist, double abs_adj_h);
 
 int calc_balance();

@@ -9,6 +9,7 @@
 #include <balance.h>
 #include <gsl/gsl_vector_double.h>
 #include <json-c/json_types.h>
+#include <plan.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -24,7 +25,6 @@
 
 #include "log.h"
 #include "mth.h"
-#include "matrix.h"
 #include "model.h"
 #include "json_helper.h"
 
@@ -34,10 +34,10 @@ model_t *g_model = NULL;
  * @brief Frees `sens_t` struct.
  * @return nothing
  */
-static void free_sens(sens_t *s)
+static void sens_free(sens_t *s)
 {
 	if (s) {
-		gsl_matrix_free(s->balance);
+		gsl_block_free(s->balance);
 		gsl_block_free(s->touch_f);
 		gsl_block_free(s->damp);
 		gsl_vector_free(s->bf_vec);
@@ -53,7 +53,7 @@ static void free_sens(sens_t *s)
  * @brief Frees `leg_t` struct.
  * @return nothing
  */
-static void free_leg(leg_t *l)
+static void leg_free(leg_t *l)
 {
 	if (l) {
 		gsl_vector_free(l->pos);
@@ -62,7 +62,7 @@ static void free_leg(leg_t *l)
 		gsl_vector_free(l->dir);
 		gsl_vector_free(l->joint_lims);
 		gsl_vector_free(l->angles);
-		fsm_free(l->fsm);
+		plan_free(&l->plan);
 		free(l);
 	}
 }
@@ -78,7 +78,7 @@ static sens_t *alloc_sens()
 		FATAL(ERR_MALLOC_FAIL);
 	}
 
-	s->balance = gsl_matrix_calloc(4, 3);
+	s->balance = gsl_block_calloc(4);
 	s->bfo_mat = gsl_matrix_calloc(3, 3);
 	s->touch_f = gsl_block_calloc(4);
 	s->damp = gsl_block_calloc(4);
@@ -87,28 +87,66 @@ static sens_t *alloc_sens()
 
 	if (!s->touch_f || !s->damp || !s->bf_vec || !s->bfo_mat || !s->tf_pos) {
 		ERR(ERR_PARSE_FAIL);
-		free_sens(s);
+		sens_free(s);
 		return NULL;
 	}
 
 	return s;
 }
 
+static void set_additional_sens()
+{
+	double sum = 0.0;
+	size_t cnt = 0;
+	leg_t *l;
+	sens_t *s = g_model->sens;
+
+	/* average balanced leg height*/
+	for (size_t i = 0; i < N_LEGS; ++i) {
+		l = g_model->legs[i];
+		if (l->bal) {
+			sum += gsl_vector_get(l->pos, 2);
+			cnt++;
+		}
+	}
+
+	if (cnt) {
+		s->avg_leg_h = sum / cnt;
+	} else {
+		s->avg_leg_h = g_model->max_dip;
+	}
+
+	/* absolute std of balanced leg heights*/
+	sum = 0.0;
+	cnt = 0;
+	for (size_t i = 0; i < N_LEGS; ++i) {
+		l = g_model->legs[i];
+		if (l->bal) {
+			sum += fabs(gsl_vector_get(l->pos, 2) - s->avg_leg_h);
+			cnt++;
+		}
+	}
+
+	if (cnt) {
+		s->abs_std_leg_h = sum / cnt;
+	} else {
+		s->abs_std_leg_h = 0.0;
+	}
+}
+
 int set_sens_from_json(struct json_object *js)
 {
-	double tf[4], d[4], bv[3], bm[9], tfp[3];
+	double tf[4] = { 0 }, d[4] = { 0 }, bv[3] = { 0 }, bm[9] = { 0 },
+		   tfp[3] = { 0 };
 	struct json_object *rsp, *tmp, *tmp2, *arr;
 	int ret = 0;
-	bool has_sens;
 	sens_t *s;
 
 	if (!js || !g_model) {
 		return 1;
 	}
 
-	has_sens = !!g_model->sens;
-
-	if (!has_sens) {
+	if (!g_model->sens) {
 		g_model->sens = alloc_sens();
 		if (!g_model->sens) {
 			return 1;
@@ -122,6 +160,7 @@ int set_sens_from_json(struct json_object *js)
 		goto err;
 	}
 
+	/*
 	// Avg_leg_h
 	if (!json_object_object_get_ex(rsp, "avg_leg_h", &tmp)) {
 		goto err;
@@ -135,6 +174,7 @@ int set_sens_from_json(struct json_object *js)
 	}
 
 	s->abs_std_leg_h = json_object_get_double(tmp);
+	*/
 
 	// Touch_force
 	if (!json_object_object_get_ex(rsp, "touch_force", &arr)) {
@@ -153,7 +193,7 @@ int set_sens_from_json(struct json_object *js)
 		goto err;
 	}
 
-	for (int i = 0; i < 3; i++) {
+	for (int i = 0; i < 4; i++) {
 		if (!(tmp = json_object_array_get_idx(arr, i)))
 			goto err;
 
@@ -212,34 +252,23 @@ int set_sens_from_json(struct json_object *js)
 		tfp[i] = json_object_get_double(tmp);
 	}
 
-	if (!has_sens) {
-		s->touch_f = block_from_array(4, tf);
-		s->damp = block_from_array(4, d);
-		s->bf_vec = vector_from_array(3, bv);
-		s->bfo_mat = matrix_from_array(3, 3, bm);
-		s->tf_pos = vector_from_array(3, tfp);
+	ret |= block_update_array(s->touch_f, 4, tf);
+	ret |= block_update_array(s->damp, 4, d);
+	ret |= vector_update_array(s->bf_vec, 3, bv);
+	ret |= matrix_update_array(s->bfo_mat, 3, 3, bm);
+	ret |= vector_update_array(s->tf_pos, 3, tfp);
 
-		if (!s->touch_f || !s->damp || !s->bf_vec || !s->bfo_mat ||
-			!s->tf_pos) {
-			goto err;
-		}
-	} else {
-		ret |= block_update_array(s->touch_f, 4, tf);
-		ret |= block_update_array(s->damp, 4, d);
-		ret |= vector_update_array(s->bf_vec, 3, bv);
-		ret |= matrix_update_array(s->bfo_mat, 3, 3, bm);
-		ret |= vector_update_array(s->tf_pos, 3, tfp);
-
-		if (ret) {
-			goto err;
-		}
+	if (ret) {
+		goto err;
 	}
+
+	set_additional_sens();
 
 	return 0;
 
 err:
 	ERR(ERR_PARSE_FAIL);
-	free_sens(s);
+	sens_free(s);
 	return 1;
 }
 
@@ -253,6 +282,7 @@ static leg_t *leg_from_json(struct json_object *j)
 	leg_t *l = NULL;
 	double p[3], dp[3], bo[3], d[3], jl[6];
 	struct json_object *tmp, *arr;
+	int res = 0;
 
 	if (!j) {
 		return NULL;
@@ -337,6 +367,16 @@ static leg_t *leg_from_json(struct json_object *j)
 		jl[i] = json_object_get_double(tmp);
 	}
 
+	/*pidc_set(&l->balance_pid, 0.06, 0.0, 0.0005, 0.02);*/
+	/*pidc_set(&l->touch_pid, 0.35, 0.0, 0.0, 0.02);*/
+
+	pidc_set(&l->balance_pid, 0.06, 0.0, 0.0005, 1.0 / 240);
+	pidc_set(&l->touch_pid, 0.35, 0.0, 0.0, 1.0 / 240);
+	/*pidc_set(&l->touch_pid, 0.35, 0.0, 0.0, 1.0 / 240);*/
+
+	/*pidc_set(&l->balance_pid, 0.2, 0.0, 0.005, 0.02);*/
+	/*pidc_set(&l->touch_pid, 0.05, 0.0, 0.0, 0.02);*/
+
 	l->bal = true;
 	l->pos = vector_from_array(3, p);
 	l->def_pos = vector_from_array(3, dp);
@@ -344,8 +384,10 @@ static leg_t *leg_from_json(struct json_object *j)
 	l->dir = vector_from_array(3, d);
 	l->joint_lims = vector_from_array(6, jl);
 	l->angles = gsl_vector_calloc(3);
+	res |= plan_new(&l->plan);
 
-	if (!l->pos || !l->def_pos || !l->base_off || !l->dir || !l->joint_lims) {
+	if (!l->pos || !l->def_pos || !l->base_off || !l->dir || !l->joint_lims ||
+		res) {
 		goto err;
 	}
 
@@ -438,8 +480,16 @@ static void model_get_angles()
 
 void model_step()
 {
+	leg_t *l;
+
+	calc_balance();
+
+	for (int i = 0; i < N_LEGS; ++i) {
+		l = g_model->legs[i];
+		plan_step(&l->plan);
+	}
+
 	model_get_angles();
-	/*calc_balance();*/
 }
 
 int model_from_json(struct json_object *j)
@@ -458,7 +508,7 @@ int model_from_json(struct json_object *j)
 		FATAL(ERR_MALLOC_FAIL);
 	}
 
-	printf("MODEL:%s\n", json_object_get_string(j));
+	DBG("MODEL:%s\n", json_object_get_string(j));
 
 	// Response
 	if (!json_object_object_get_ex(j, "rsp", &rsp)) {
@@ -596,24 +646,25 @@ int model_from_json(struct json_object *j)
 	}
 
 	// Free previous model
-	free_model(g_model);
+	model_free(g_model);
 	g_model = mod;
 	return 0;
 
 err:
 	json_object_put(j);
-	free_model(g_model);
+	model_free(g_model);
 	return 1;
 }
 
-void free_model(model_t *mod)
+void model_free(model_t *mod)
 {
 	if (mod) {
 		for (int i = 0; i < N_LEGS; i++) {
-			free_leg(mod->legs[i]);
+			leg_free(mod->legs[i]);
 		}
 
 		gsl_matrix_free(mod->angles);
+		sens_free(g_model->sens);
 		free(mod);
 	}
 }
