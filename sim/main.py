@@ -58,7 +58,7 @@ def update_joints(data):
             maxVelocity=p.getJointInfo(q.model, l.heel)[11])
         p.setJointMotorControl2(q.model, l.dampener, controlMode=p.POSITION_CONTROL,
                                 targetPosition=0.0,
-                                force=l.stiffness_c * (damp / l.damp_len))
+                                force=l.stiffness_c * (0.4 + (damp / l.damp_len)))
 
 
 def connect_pe():
@@ -215,16 +215,16 @@ def api_step(req, data):
         req.update(NO_DATA)
         return
 
-    for _ in range(1):
+    for _ in range(5):
         update_joints(parsed_array)
         p.stepSimulation()
 
     q.sens_info.update()
     req.update(RES_OK)
     req.update({"rsp": q.sens_info.get_json()})
-    # time.sleep(0.02)
+    time.sleep(0.03)
     # time.sleep(0.015)
-    time.sleep(0.007)
+    # time.sleep(0.007)
 
 
 def api_echo(req, data):
@@ -237,12 +237,14 @@ def api_echo(req, data):
 
 
 def api_model(req, data):
+    print("api_model called")
     if q is None:
         req.update(NO_MODEL)
         return
 
     req.update(RES_OK)
     req.update({"rsp": q.get_json()})
+    print(json.dumps(req))
 
 
 def api_sensors(req, data):

@@ -109,7 +109,7 @@ static int start_sim()
 #ifdef NOSIM
 	return start_nosim();
 #else
-	(void)start_nosim();
+	(void)start_nosim;
 #endif
 
 	struct json_object *j;

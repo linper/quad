@@ -9,7 +9,8 @@ LEG_TAR_H = -0.26
 T_RAD = 0.012
 MAX_WALK_H = -0.13
 MIN_WALK_H = -0.20
-SOFT_HIT_THR = 0.02
+SOFT_HIT_THR = 0.1
+# SOFT_HIT_THR = 0.02
 
 cw_seq = [0, 1, 3, 2]
 

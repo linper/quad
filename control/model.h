@@ -22,10 +22,6 @@
 #define N_LEGS 4
 #define NAME_LEN 16
 
-//#ifdef NOSIM_DBG
-//#define NOSIM
-//#endif
-
 typedef struct leg leg_t;
 
 /**
@@ -84,12 +80,13 @@ typedef struct model {
 
 	double max_dip; ///< 		How low can legs decend
 	double min_dip; ///< 		How high can legs ascend
-	double max_walk_h; ///< 		How low can legs decend
-	double min_walk_h; ///< 		How high can legs ascend
+	double max_walk_h; ///< 	How low can legs decend
+	double min_walk_h; ///< 	How high can legs ascend
 	double leg_tar_h;
 	double t_rad; ///< 			Touch radius
 	double link_len; ///< 		Length of single leg link
 	double soft_hit_thr; ///< 	Treshold for soft hit
+	double mass; ///< 			Total mass of the model
 	int cw[4]; ///< 			Clock-wise seg sequence
 } model_t;
 

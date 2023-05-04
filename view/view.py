@@ -17,7 +17,8 @@ VC_PATH = "/tmp/view_ctl_pipe"
 CV_PATH = "/tmp/ctl_view_pipe"
 
 CW = [0, 1, 3, 2]
-SOFT_HIT_THR = 0.02
+SOFT_HIT_THR = 0.1
+# SOFT_HIT_THR = 0.02
 
 tf_col_tbl = {
     3: "green",

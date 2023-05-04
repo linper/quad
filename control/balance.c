@@ -19,6 +19,8 @@
 #include <balance.h>
 #include <pidc.h>
 
+#define G_ACC 10
+
 void get_imp_diff(gsl_vector *id)
 {
 	double x_min, x_max, x_diff, x_lever, y_min, y_max, y_diff, y_lever, x, y;
@@ -60,8 +62,9 @@ void get_imp_diff(gsl_vector *id)
 	}
 }
 
-static void get_bal_base(gsl_vector *res, double cof)
+static void get_bal_base(gsl_block *res, double cof)
 {
+	double gh_diff, lh_diff, lh_mod;
 	gsl_matrix *bfo_mat, *height_mat;
 	gsl_vector *leg_pos_mod;
 	leg_t *l;
@@ -79,12 +82,12 @@ static void get_bal_base(gsl_vector *res, double cof)
 
 	// making shift matrix in z axis
 	gsl_matrix_set(height_mat, 2, 3, (g_model->leg_tar_h - s->avg_leg_h));
+	gh_diff = g_model->leg_tar_h - s->avg_leg_h;
 
 	for (int i = 0; i < N_LEGS; i++) {
 		l = g_model->legs[i];
 		if (s->damp->data[i] < g_model->soft_hit_thr) {
-			gsl_vector_set(res, i,
-						   cof * (s->avg_leg_h - gsl_vector_get(l->pos, 2)));
+			res->data[i] = cof * (s->avg_leg_h - gsl_vector_get(l->pos, 2));
 			continue;
 		}
 
@@ -92,11 +95,11 @@ static void get_bal_base(gsl_vector *res, double cof)
 		gsl_vector_set(leg_pos_mod, 3, 1.0);
 
 		leg_pos_mod = matrix_vector_dot(bfo_mat, leg_pos_mod);
-		leg_pos_mod = matrix_vector_dot(height_mat, leg_pos_mod);
+		lh_mod = gsl_vector_get(leg_pos_mod, 2);
+		lh_mod += gh_diff;
+		lh_diff = (lh_mod - gsl_vector_get(l->pos, 2)) * cof;
 
-		gsl_vector_set(
-			res, i,
-			(gsl_vector_get(leg_pos_mod, 2) - gsl_vector_get(l->pos, 2)) * cof);
+		res->data[i] = lh_diff;
 	}
 
 	gsl_matrix_free(bfo_mat);
@@ -129,10 +132,10 @@ int calc_balance()
 	const double BASE_PART_COF = 1.0;
 	sens_t *s = g_model->sens;
 
-	gsl_vector *base_part, *imp_diff;
-	gsl_block *touch_diff, *drop_diff;
+	gsl_vector *imp_diff;
+	gsl_block *base_part, *touch_diff, *drop_diff;
 
-	base_part = gsl_vector_calloc(N_LEGS);
+	base_part = gsl_block_calloc(N_LEGS);
 	drop_diff = gsl_block_calloc(N_LEGS);
 	touch_diff = gsl_block_calloc(N_LEGS);
 	imp_diff = gsl_vector_calloc(N_LEGS);
@@ -148,7 +151,7 @@ int calc_balance()
 	printf("touch f: ");
 	block_print(s->touch_f);
 	printf("base: ");
-	vector_print(base_part);
+	block_print(base_part);
 	printf("drop: ");
 	block_print(drop_diff);
 	printf("touch_diff: ");
@@ -156,11 +159,11 @@ int calc_balance()
 	printf("imp_diff: ");
 	vector_print(imp_diff);
 
-	printf("balance0: ");
-	block_print(s->balance);
+	/*printf("balance0: ");*/
+	/*block_print(s->balance);*/
 	for (int i = 0; i < N_LEGS; i++) {
-		s->balance->data[i] = pidc_eval(&g_model->legs[i]->balance_pid, 0.0,
-										gsl_vector_get(base_part, i));
+		s->balance->data[i] =
+			pidc_eval(&g_model->legs[i]->balance_pid, 0.0, base_part->data[i]);
 	}
 
 	printf("balance1: ");
@@ -180,7 +183,7 @@ int calc_balance()
 	printf("final: ");
 	block_print(s->balance);
 
-	gsl_vector_free(base_part);
+	gsl_block_free(base_part);
 	gsl_block_free(drop_diff);
 	gsl_block_free(touch_diff);
 	gsl_vector_free(imp_diff);

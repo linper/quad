@@ -367,15 +367,11 @@ static leg_t *leg_from_json(struct json_object *j)
 		jl[i] = json_object_get_double(tmp);
 	}
 
-	/*pidc_set(&l->balance_pid, 0.06, 0.0, 0.0005, 0.02);*/
-	/*pidc_set(&l->touch_pid, 0.35, 0.0, 0.0, 0.02);*/
-
-	pidc_set(&l->balance_pid, 0.06, 0.0, 0.0005, 1.0 / 240);
-	pidc_set(&l->touch_pid, 0.35, 0.0, 0.0, 1.0 / 240);
+	/*pidc_set(&l->balance_pid, 0.06, 0.0, 0.0005, 1.0 / 240);*/
 	/*pidc_set(&l->touch_pid, 0.35, 0.0, 0.0, 1.0 / 240);*/
 
-	/*pidc_set(&l->balance_pid, 0.2, 0.0, 0.005, 0.02);*/
-	/*pidc_set(&l->touch_pid, 0.05, 0.0, 0.0, 0.02);*/
+	pidc_set(&l->balance_pid, 0.27, -0.00, 0.0005, 1.0 / 48);
+	pidc_set(&l->touch_pid, 0.45, 0.0, 0.0, 1.0 / 48);
 
 	l->bal = true;
 	l->pos = vector_from_array(3, p);
@@ -575,6 +571,13 @@ int model_from_json(struct json_object *j)
 	}
 
 	mod->soft_hit_thr = json_object_get_double(tmp);
+
+	// mass
+	if (!json_object_object_get_ex(tmp2, "mass", &tmp)) {
+		goto err;
+	}
+
+	mod->mass = json_object_get_double(tmp);
 
 	// Max_dip
 	if (!json_object_object_get_ex(tmp2, "max_dip", &tmp)) {

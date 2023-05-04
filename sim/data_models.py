@@ -59,8 +59,10 @@ class SensInfo:
         self.damp = np.zeros(4, dtype=float)
         self.base_force_vector = np.zeros(3, dtype=float)
         self.bf_hist = [np.zeros(3, dtype=float)]
-        # self.bf_max = 15
-        self.bf_max = 35
+        # self.bf_max = 5
+        # self.bf_max = 8
+        self.bf_max = 15
+        # self.bf_max = 35
         self.base_orientation_matrix = np.zeros((3, 3), dtype=float)
         self.base_frame_orientation_matrix = np.zeros((3, 3), dtype=float)
         # self.base_orientation = np.zeros(4, dtype=float)
@@ -251,7 +253,10 @@ class Leg:
         self.sh_h = 0.03
         self.link_len = 0.1
         self.damp_len = 0.012
-        self.stiffness_c = 0.00005
+        self.stiffness_c = 1.0
+        # self.stiffness_c = 0.1
+        # self.stiffness_c = 0.02
+        # self.stiffness_c = 0.00005
         self.do_balance: bool = True
 
     def get_json(self):
@@ -305,5 +310,6 @@ class Quad:
                 "cw": cw_seq,
                 "link_len": 0.1,
                 "soft_hit_thr": SOFT_HIT_THR,
+                "mass": 5.0,
             }, "legs": [l.get_json() for l in self.legs]
         }
