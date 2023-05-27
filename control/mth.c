@@ -21,22 +21,130 @@
 #include <log.h>
 #include <mth.h>
 
-double area(double *p1, double *p2, double *p3)
+/****************
+*  VEC BUFFER  *
+****************/
+void vbuf_free(vbuf_t *b)
 {
-	return fabs((p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) +
-				 p3[0] * (p1[1] - p2[1])) /
-				2.0);
+	if (!b) {
+		return;
+	}
+
+	gsl_block_free(b->block);
+	free(b);
 }
 
-double bound_data(double dt, double lo, double hi)
+vbuf_t *vbuf_create(size_t cap)
 {
-	if (dt < lo) {
-		return lo;
-	} else if (dt > hi) {
-		return hi;
-	} else {
-		return dt;
+	gsl_block *b = gsl_block_calloc(cap);
+	vbuf_t *vb = calloc(1, sizeof(vbuf_t));
+	if (!b || !vb) {
+		FATAL(ERR_MALLOC_FAIL);
 	}
+
+	vb->block = b;
+
+	return vb;
+}
+
+gsl_vector *vbuf_convert_to_vec(vbuf_t *b)
+{
+	if (!b) {
+		return NULL;
+	}
+
+	gsl_vector *v = gsl_vector_alloc_from_block(b->block, 0, b->cnt, 1);
+	if (!v) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	free(b);
+
+	return v;
+}
+
+void vbuf_push(vbuf_t *b, double val)
+{
+	if (!b) {
+		return;
+	}
+
+	if (b->cnt + 1 > b->block->size) {
+		block_expand(b->block);
+	}
+
+	b->block->data[b->cnt++] = val;
+}
+
+double vbuf_pop(vbuf_t *b)
+{
+	if (!b || !b->cnt) {
+		return NAN;
+	}
+
+	return b->block->data[--b->cnt];
+}
+
+double vbuf_get(vbuf_t *b, size_t index)
+{
+	if (!b || index > b->cnt) {
+		return NAN;
+	}
+
+	return b->block->data[index];
+}
+
+int vbuf_set(vbuf_t *b, size_t index, double val)
+{
+	if (!b || index > b->cnt) {
+		return 1;
+	}
+
+	b->block->data[index] = val;
+
+	return 0;
+}
+
+int vbuf_insert(vbuf_t *b, size_t index, double val)
+{
+	if (!b || index > b->cnt) {
+		return 1;
+	}
+
+	if (b->cnt + 1 > b->block->size) {
+		block_expand(b->block);
+	}
+
+	memmove(b->block->data + index, b->block->data + index + 1,
+			sizeof(double) * (b->cnt - index));
+
+	b->block->data[b->cnt++] = val;
+
+	return 0;
+}
+
+double vbuf_remove(vbuf_t *b, size_t index)
+{
+	if (!b || index > b->cnt - 1) {
+		return NAN;
+	}
+
+	double val = b->block->data[index];
+
+	memmove(b->block->data + index + 1, b->block->data + index,
+			sizeof(double) * (b->cnt - index - 1));
+
+	return val;
+}
+
+void vbuf_clear(vbuf_t *b)
+{
+	if (!b) {
+		return;
+	}
+
+	memset(b->block->data, 0, sizeof(double) * b->block->size);
+	b->cnt = 0;
 }
 
 /************
@@ -53,7 +161,7 @@ gsl_matrix *matrix_from_array(size_t n_rows, size_t n_cols, const double *arr)
 
 	m = gsl_matrix_calloc(n_rows, n_cols);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	for (size_t i = 0; i < n_rows; i++) {
@@ -77,6 +185,157 @@ int matrix_update_array(gsl_matrix *m, size_t n_rows, size_t n_cols,
 	return 0;
 }
 
+gsl_matrix *matrix_clone(gsl_matrix *m)
+{
+	gsl_matrix *c = gsl_matrix_calloc(m->size1, m->size2);
+	if (!m) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	gsl_matrix_memcpy(c, m);
+
+	return c;
+}
+
+gsl_matrix *matrix_sub_n(gsl_matrix *a, gsl_matrix *b)
+{
+	gsl_matrix *m;
+
+	if (!a || !b) {
+		return NULL;
+	}
+
+	m = gsl_matrix_calloc(a->size1, a->size2);
+	if (!m) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	gsl_matrix_memcpy(m, a);
+
+	gsl_matrix_sub(m, b);
+
+	return m;
+}
+
+gsl_matrix *matrix_add_n(gsl_matrix *a, gsl_matrix *b)
+{
+	gsl_matrix *m;
+
+	if (!a || !b) {
+		return NULL;
+	}
+
+	m = gsl_matrix_calloc(a->size1, a->size2);
+	if (!m) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	gsl_matrix_memcpy(m, a);
+
+	gsl_matrix_add(m, b);
+
+	return m;
+}
+
+gsl_matrix *matrix_mul_n(gsl_matrix *a, gsl_matrix *b)
+{
+	gsl_matrix *m;
+
+	if (!a || !b) {
+		return NULL;
+	}
+
+	m = gsl_matrix_calloc(a->size1, a->size2);
+	if (!m) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	gsl_matrix_memcpy(m, a);
+
+	gsl_matrix_mul_elements(m, b);
+
+	return m;
+}
+
+gsl_matrix *matrix_div_n(gsl_matrix *a, gsl_matrix *b)
+{
+	gsl_matrix *m;
+
+	if (!a || !b) {
+		return NULL;
+	}
+
+	m = gsl_matrix_calloc(a->size1, a->size2);
+	if (!m) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	gsl_matrix_memcpy(m, a);
+
+	gsl_matrix_div_elements(m, b);
+
+	return m;
+}
+
+gsl_matrix *matrix_scale_n(gsl_matrix *v, const double l)
+{
+	gsl_matrix *c = matrix_clone(v);
+	if (!c) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	gsl_matrix_scale(c, l);
+
+	return c;
+}
+
+gsl_matrix *matrix_add_constant_n(gsl_matrix *v, const double l)
+{
+	gsl_matrix *c = matrix_clone(v);
+	if (!c) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	gsl_matrix_add_constant(c, l);
+
+	return c;
+}
+
+gsl_matrix *matrix_linspace(gsl_vector *start, gsl_vector *end, size_t n)
+{
+	gsl_vector *cur, *inc;
+	gsl_matrix *m;
+
+	if (!n || !start || !end || start->size != end->size) {
+		return NULL;
+	}
+
+	cur = vector_clone(start);
+	inc = vector_clone(end);
+	m = gsl_matrix_calloc(n, start->size);
+	if (!m) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
+
+	if (n > 1) {
+		gsl_vector_sub(inc, start);
+		gsl_vector_scale(inc, 1.0 / (n - 1));
+	}
+
+	for (size_t i = 0; i < n; i++) {
+		for (size_t j = 0; j < start->size; j++) {
+			gsl_matrix_set(m, i, j, gsl_vector_get(cur, j));
+		}
+
+		gsl_vector_add(cur, inc);
+	}
+
+	gsl_vector_free(cur);
+	gsl_vector_free(inc);
+
+	return m;
+}
+
 int matrix_copy_to(gsl_matrix *dst, gsl_matrix *src, size_t di, size_t dj,
 				   size_t si, size_t sj, size_t ni, size_t nj)
 {
@@ -93,6 +352,76 @@ int matrix_copy_to(gsl_matrix *dst, gsl_matrix *src, size_t di, size_t dj,
 	return 0;
 }
 
+int matrix_add_vec_rows(gsl_matrix *m, gsl_vector *v)
+{
+	if (!m || !v || m->size2 != v->size) {
+		ERR(ERR_INVALID_INPUT);
+		return 1;
+	}
+
+	for (size_t i = 0; i < m->size2; i++) {
+		double val = gsl_vector_get(v, i);
+		for (size_t j = 0; j < m->size1; j++) {
+			*gsl_matrix_ptr(m, j, i) -= val;
+		}
+	}
+
+	return 0;
+}
+
+int matrix_sub_vec_rows(gsl_matrix *m, gsl_vector *v)
+{
+	if (!m || !v || m->size2 != v->size) {
+		ERR(ERR_INVALID_INPUT);
+		return 1;
+	}
+
+	for (size_t i = 0; i < m->size2; i++) {
+		double val = gsl_vector_get(v, i);
+		for (size_t j = 0; j < m->size1; j++) {
+			*gsl_matrix_ptr(m, j, i) -= val;
+		}
+	}
+
+	return 0;
+}
+
+gsl_vector *matrix_sum_axis(gsl_matrix *m, int axis)
+{
+	gsl_vector *v;
+
+	if (!m || axis < 0 || axis > 1) {
+		return NULL;
+	}
+
+	if (!axis) {
+		v = gsl_vector_calloc(m->size2);
+		if (!v) {
+			FATAL(ERR_MALLOC_FAIL);
+		}
+
+		for (size_t i = 0; i < m->size1; i++) {
+			for (size_t j = 0; j < m->size2; j++) {
+				v->data[j * v->stride] += m->data[i * m->tda + j];
+			}
+		}
+
+	} else {
+		v = gsl_vector_calloc(m->size1);
+		if (!v) {
+			FATAL(ERR_MALLOC_FAIL);
+		}
+
+		for (size_t i = 0; i < m->size1; i++) {
+			for (size_t j = 0; j < m->size2; j++) {
+				v->data[i * v->stride] += m->data[i * m->tda + j];
+			}
+		}
+	}
+
+	return v;
+}
+
 gsl_matrix *matrix_dot(gsl_matrix *a, gsl_matrix *b)
 {
 	double ai, bi, temp;
@@ -104,7 +433,7 @@ gsl_matrix *matrix_dot(gsl_matrix *a, gsl_matrix *b)
 
 	m = gsl_matrix_calloc(a->size1, b->size2);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 	for (size_t i = 0; i < m->size1; i++) {
 		for (size_t j = 0; j < m->size2; j++) {
@@ -129,12 +458,13 @@ gsl_vector *matrix_vector_dot(gsl_matrix *a, gsl_vector *b)
 	gsl_vector *m;
 
 	if (!a || !b || a->size2 != b->size) {
+		ERR(ERR_INVALID_INPUT);
 		return NULL;
 	}
 
 	m = gsl_vector_calloc(b->size);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	for (size_t i = 0; i < b->size; i++) {
@@ -200,7 +530,7 @@ gsl_vector *vector_from_array(size_t n, const double *arr)
 
 	m = gsl_vector_calloc(n);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	for (size_t i = 0; i < n; i++) {
@@ -227,7 +557,7 @@ gsl_vector *vector_clone(gsl_vector *v)
 {
 	gsl_vector *c = gsl_vector_calloc(v->size);
 	if (!v) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	gsl_vector_memcpy(c, v);
@@ -246,6 +576,9 @@ gsl_vector *vector_linspace(double start, double end, size_t n)
 	}
 
 	v = gsl_vector_calloc(n);
+	if (!v) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
 
 	if (n > 1) {
 		inc = (end - start) / (n - 1);
@@ -257,6 +590,24 @@ gsl_vector *vector_linspace(double start, double end, size_t n)
 	}
 
 	return v;
+}
+
+double vector_dist(gsl_vector *from, gsl_vector *to)
+{
+	double sum = 0.0, e;
+
+	if (!from || !to) {
+		return 0.0;
+	}
+
+	for (size_t i = 0; i < from->size; i++) {
+		e = gsl_vector_get(from, i) - gsl_vector_get(to, i);
+		sum += e * e;
+	}
+
+	sum = sqrt(sum);
+
+	return sum;
 }
 
 double vector_length(gsl_vector *v)
@@ -297,6 +648,60 @@ gsl_vector *vector_set_length_n(gsl_vector *v, double l)
 	vector_set_length(nv, l);
 
 	return nv;
+}
+
+double vector_mean_range(gsl_vector *v, size_t off, size_t n)
+{
+	if (!v) {
+		return NAN;
+	}
+
+	double sum = 0.0;
+	for (size_t i = off; i < off + n; i++) {
+		sum += v->data[v->stride * i];
+	}
+
+	double mean = sum / n;
+
+	return mean;
+}
+
+double vector_std_range(gsl_vector *v, size_t off, size_t n)
+{
+	double sum, std, mean, val;
+
+	if (!v) {
+		return NAN;
+	}
+
+	mean = vector_mean_range(v, off, n);
+
+	sum = 0.0;
+	for (size_t i = off; i < off + n; i++) {
+		val = mean - v->data[v->stride * i];
+		val *= val;
+		sum += val;
+	}
+
+	std = sum / n;
+	std = sqrt(std);
+
+	return std;
+}
+
+void vector_increments(gsl_vector *v)
+{
+	if (!v) {
+		return;
+	}
+
+	for (size_t i = 0; i < v->size - 1; i++) {
+		v->data[v->stride * i] =
+			v->data[v->stride * (i + 1)] - v->data[v->stride * i];
+	}
+
+	v->data[v->stride * (v->size - 1)] = 0.0;
+	v->size--;
 }
 
 double vector3_cos(gsl_vector *a, gsl_vector *b)
@@ -357,6 +762,15 @@ double vector_dot(gsl_vector *a, gsl_vector *b)
 	}
 
 	return sum;
+}
+
+gsl_vector *vector_project(gsl_vector *from, gsl_vector *to)
+{
+	double len = vector_dot(from, to);
+	len /= vector_length(to);
+	gsl_vector *v = vector_set_length_n(to, len);
+
+	return v;
 }
 
 int vector_copy_to(gsl_vector *dst, gsl_vector *src, size_t di, size_t si,
@@ -422,7 +836,7 @@ gsl_vector *vector_sub_n(gsl_vector *a, gsl_vector *b)
 
 	m = gsl_vector_calloc(a->size);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	gsl_vector_memcpy(m, a);
@@ -442,7 +856,7 @@ gsl_vector *vector_add_n(gsl_vector *a, gsl_vector *b)
 
 	m = gsl_vector_calloc(a->size);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	gsl_vector_memcpy(m, a);
@@ -462,7 +876,7 @@ gsl_vector *vector_mul_n(gsl_vector *a, gsl_vector *b)
 
 	m = gsl_vector_calloc(a->size);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	gsl_vector_memcpy(m, a);
@@ -482,7 +896,7 @@ gsl_vector *vector_div_n(gsl_vector *a, gsl_vector *b)
 
 	m = gsl_vector_calloc(a->size);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	gsl_vector_memcpy(m, a);
@@ -557,7 +971,7 @@ gsl_block *block_from_array(size_t n, const double *arr)
 
 	m = gsl_block_calloc(n);
 	if (!m) {
-		return NULL;
+		FATAL(ERR_MALLOC_FAIL);
 	}
 
 	memcpy(m->data, arr, n * sizeof(double));
@@ -605,6 +1019,9 @@ gsl_block *block_linspace(double start, double end, size_t n)
 	}
 
 	b = gsl_block_calloc(n);
+	if (!b) {
+		FATAL(ERR_MALLOC_FAIL);
+	}
 
 	if (n > 1) {
 		inc = (end - start) / (n - 1);
@@ -627,7 +1044,6 @@ void block_expand(gsl_block *b)
 	b->data = realloc(b->data, 2 * b->size);
 	if (!b->data) {
 		FATAL(ERR_MALLOC_FAIL);
-		return;
 	}
 
 	b->size *= 2;
@@ -652,7 +1068,6 @@ void block_check_size(gsl_block *b, size_t sz)
 	b->data = realloc(b->data, new_sz);
 	if (!b->data) {
 		FATAL(ERR_MALLOC_FAIL);
-		return;
 	}
 
 	b->size = new_sz;
@@ -679,4 +1094,132 @@ void block_print(gsl_block *b)
 		printf("%.4g%s", b->data[i], i + 1 < b->size ? ", " : "");
 	}
 	printf("]\n");
+}
+
+/*********
+*  MISC  *
+*********/
+static bool sq_roots(double a, double b, double c, double *r1, double *r2)
+{
+	double D = sqrt((b * b - 4 * a * c));
+
+	if (D >= 0) {
+		if (r1)
+			*r1 = (-b + D) / (2 * a);
+		if (r2)
+			*r2 = (-b - D) / (2 * a);
+
+		return true;
+	} else {
+		if (r1)
+			*r1 = 0.0;
+		if (r2)
+			*r2 = 0.0;
+
+		return false;
+	}
+}
+
+bool ellipse_point_inside(double a, double b, double x, double y, double *val)
+{
+	double v = ((x * x) / (a * a)) + ((y * y) / (b * b));
+	v = v * v;
+	*val = v;
+
+	return v <= 1.0;
+}
+
+bool ellipse_line_intersect(double a, double b, double k, double c, double *x1,
+							double *y1, double *x2, double *y2)
+{
+	double ra, rb, rc, r1, r2;
+	bool inter;
+	ra = (k * k * a * a) + b * b;
+	rb = 2 * k * c * (a * a);
+	rc = ((c * c) - (b * b)) * (a * a);
+	inter = sq_roots(ra, rb, rc, &r1, &r2);
+
+	if (inter) {
+		if (x1)
+			*x1 = r1;
+		if (y1)
+			*y1 = k * r1 + c;
+		if (x2)
+			*x2 = r2;
+		if (y2)
+			*y2 = k * r2 + c;
+	} else {
+		if (x1)
+			*x1 = 0.0;
+		if (y1)
+			*y1 = 0.0;
+		if (x2)
+			*x2 = 0.0;
+		if (y2)
+			*y2 = 0.0;
+	}
+
+	return inter;
+}
+
+void line_cof(double x1, double y1, double x2, double y2, double *k, double *b)
+{
+	double k_val, b_val;
+	double fi = 0.0000001;
+
+	k_val = (y2 - y1) / (x2 - x1 + fi);
+	b_val = y1 - k_val * x1;
+	if (!k_val)
+		k_val = fi;
+
+	*k = k_val;
+	*b = b_val;
+}
+
+double area(double *p1, double *p2, double *p3)
+{
+	return fabs((p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) +
+				 p3[0] * (p1[1] - p2[1])) /
+				2.0);
+}
+
+double bound_data(double dt, double lo, double hi)
+{
+	if (dt < lo) {
+		return lo;
+	} else if (dt > hi) {
+		return hi;
+	} else {
+		return dt;
+	}
+}
+
+int centroid_of_polygon(gsl_vector *res, gsl_matrix *pts)
+{
+	if (!res || !pts) {
+		ERR(ERR_INVALID_INPUT);
+		return 1;
+	}
+
+	double crs_sum = 0.0;
+	double *x_sum = gsl_vector_ptr(res, 0);
+	double *y_sum = gsl_vector_ptr(res, 1);
+
+	for (size_t i = 0; i < pts->size1; ++i) {
+		size_t j = (i + 1) % pts->size1;
+		double cross = gsl_matrix_get(pts, i, 0) * gsl_matrix_get(pts, j, 1) -
+					   gsl_matrix_get(pts, j, 0) * gsl_matrix_get(pts, i, 1);
+
+		crs_sum += cross;
+		*x_sum +=
+			(gsl_matrix_get(pts, i, 0) + gsl_matrix_get(pts, j, 0)) * cross;
+		*y_sum +=
+			(gsl_matrix_get(pts, i, 1) + gsl_matrix_get(pts, j, 1)) * cross;
+	}
+
+	double z = 1.0 / (3.0 * crs_sum);
+
+	gsl_vector_scale(res, z);
+
+	return 0;
 }

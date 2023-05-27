@@ -409,7 +409,6 @@ class Stance:
             c = plt.imshow(heatmap.T, cmap="hot", interpolation="nearest")
             plt.colorbar(c)
 
-
             en.pts[en.pidx] = opt_pos
             # print(f"{en.orig_pts[en.pidx]} ({en.pidx})==> {en.pts[en.pidx]}")
             # print(

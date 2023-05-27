@@ -99,7 +99,7 @@ class GoTask:
     def to_json(self):
         return {"idx": self.idx, 
                 "do_lift": self.do_lift,
-                "directions": self.direction.tolist(),
+                "direction": self.direction.tolist(),
                 "n_points": len(self.points),
                 "points":[p.pos.tolist() for p in self.points]}
 

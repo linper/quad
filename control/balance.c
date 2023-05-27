@@ -19,9 +19,9 @@
 #include <balance.h>
 #include <pidc.h>
 
-#define G_ACC 10
+#define G_ACC 10.0
 
-void get_imp_diff(gsl_vector *id)
+void get_imp_diff(gsl_block *id)
 {
 	double x_min, x_max, x_diff, x_lever, y_min, y_max, y_diff, y_lever, x, y;
 	sens_t *s = g_model->sens;
@@ -58,7 +58,23 @@ void get_imp_diff(gsl_vector *id)
 		y_lever = fabs(gsl_vector_get(g_model->legs[i]->pos, 1) -
 					   gsl_vector_get(s->tf_pos, 1)) /
 				  y_diff;
-		gsl_vector_set(id, i, x_lever * y_lever);
+		id->data[i] = x_lever * y_lever;
+	}
+}
+
+static void get_shock_diff(gsl_block *sd)
+{
+	const double SHOCK_SENS_COF = 3.5;
+	double weight = g_model->mass * G_ACC;
+	sens_t *s = g_model->sens;
+
+	for (int i = 0; i < N_LEGS; i++) {
+		if (s->touch_f->data[i] > weight) {
+			sd->data[i] = SHOCK_SENS_COF * g_model->t_rad *
+						  ((s->touch_f->data[i] / weight) - 1);
+		} else {
+			sd->data[i] = 0;
+		}
 	}
 }
 
@@ -132,17 +148,18 @@ int calc_balance()
 	const double BASE_PART_COF = 1.0;
 	sens_t *s = g_model->sens;
 
-	gsl_vector *imp_diff;
-	gsl_block *base_part, *touch_diff, *drop_diff;
+	gsl_block *imp_diff, *base_part, *touch_diff, *drop_diff, *shock_diff;
 
 	base_part = gsl_block_calloc(N_LEGS);
 	drop_diff = gsl_block_calloc(N_LEGS);
 	touch_diff = gsl_block_calloc(N_LEGS);
-	imp_diff = gsl_vector_calloc(N_LEGS);
+	shock_diff = gsl_block_calloc(N_LEGS);
+	imp_diff = gsl_block_calloc(N_LEGS);
 
 	get_bal_base(base_part, BASE_PART_COF);
 	get_touch_diff(drop_diff, touch_diff);
 	get_imp_diff(imp_diff);
+	get_shock_diff(shock_diff);
 
 	memset(s->balance->data, 0, s->balance->size * sizeof(double));
 
@@ -156,14 +173,17 @@ int calc_balance()
 	block_print(drop_diff);
 	printf("touch_diff: ");
 	block_print(touch_diff);
+	printf("shock_diff: ");
+	block_print(shock_diff);
 	printf("imp_diff: ");
-	vector_print(imp_diff);
+	block_print(imp_diff);
 
 	/*printf("balance0: ");*/
 	/*block_print(s->balance);*/
 	for (int i = 0; i < N_LEGS; i++) {
 		s->balance->data[i] =
-			pidc_eval(&g_model->legs[i]->balance_pid, 0.0, base_part->data[i]);
+			pidc_eval(&g_model->legs[i]->balance_pid, 0.0,
+					  base_part->data[i] + shock_diff->data[i]);
 	}
 
 	printf("balance1: ");
@@ -171,7 +191,7 @@ int calc_balance()
 
 	for (int i = 0; i < N_LEGS; i++) {
 		double *cur = s->balance->data + i;
-		if (gsl_vector_get(imp_diff, i) > 0.33) {
+		if (imp_diff->data[i] > 0.33) {
 			*cur += pidc_eval(&g_model->legs[i]->touch_pid, *cur, *cur);
 		} else {
 			*cur += pidc_eval(&g_model->legs[i]->touch_pid, *cur,
@@ -186,7 +206,8 @@ int calc_balance()
 	gsl_block_free(base_part);
 	gsl_block_free(drop_diff);
 	gsl_block_free(touch_diff);
-	gsl_vector_free(imp_diff);
+	gsl_block_free(imp_diff);
+	gsl_block_free(shock_diff);
 
 	return 0;
 }

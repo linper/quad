@@ -5,6 +5,9 @@
  * @date 2023-02-13
  */
 
+#include <gsl/gsl_vector_double.h>
+#include <mth.h>
+#include <stance.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -175,10 +178,10 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 	(void)conn;
 
 	int n_tasks, n_points, lidx;
-	double *pos_arr;
+	double *pos_arr, dir_arr[2];
 	bool do_lift;
 
-	json_object *jtasks, *jtask, *jpts, *jpt, *tmp1;
+	json_object *jtasks, *jtask, *jpts, *jpt, *tmp1, *jdir;
 
 	if (!json_object_object_get_ex(jreq, "n_tasks", &tmp1))
 		goto err;
@@ -195,15 +198,26 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 		if (!json_object_object_get_ex(jtask, "do_lift", &tmp1))
 			goto err;
 
-		do_lift= json_object_get_boolean(tmp1);
+		do_lift = json_object_get_boolean(tmp1);
 
 		if (!json_object_object_get_ex(jtask, "idx", &tmp1))
 			goto err;
 
 		lidx = json_object_get_int(tmp1);
 
-		if (lidx < 0)
-			continue;
+		/*if (lidx < 0)*/
+		/*continue;*/
+
+		if (!json_object_object_get_ex(jtask, "direction", &jdir))
+			goto err;
+
+		// TODO currenty uses directionfrom last task
+		for (int j = 0; j < 2; j++) {
+			if (!(tmp1 = json_object_array_get_idx(jdir, j)))
+				goto err;
+
+			dir_arr[j] = json_object_get_double(tmp1);
+		}
 
 		if (!json_object_object_get_ex(jtask, "n_points", &tmp1))
 			goto err;
@@ -230,7 +244,17 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 				json_object_get_double(json_object_array_get_idx(jpt, 2));
 		}
 
-		plan_make_movement(&g_model->legs[lidx]->plan, pos_arr, n_points, do_lift);
+		gsl_vector *dir = vector_from_array(2, dir_arr);
+
+		if (lidx != -1) {
+			plan_make_movement(&g_model->legs[lidx]->plan, pos_arr, n_points,
+							   do_lift);
+		} else {
+			gsl_vector *pt = vector_from_array(2, pos_arr);
+			get_movement(dir, pt);
+			gsl_vector_free(pt);
+		}
+
 		free(pos_arr);
 	}
 

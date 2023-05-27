@@ -26,6 +26,7 @@
 #include "log.h"
 #include "mth.h"
 #include "model.h"
+#include "stance.h"
 #include "json_helper.h"
 
 model_t *g_model = NULL;
@@ -636,6 +637,12 @@ int model_from_json(struct json_object *j)
 		mod->legs[l->idx] = l;
 		mod->cw_legs[mod->cw[l->idx]] = l;
 	}
+
+	// Legs excentricity
+	mod->leg_exc = (gsl_vector_get(mod->legs[3]->def_pos, 0) -
+					gsl_vector_get(mod->legs[1]->def_pos, 0)) /
+				   (gsl_vector_get(mod->legs[0]->def_pos, 1) -
+					gsl_vector_get(mod->legs[1]->def_pos, 1));
 
 	// Setup "next" legs
 	for (int i = 0; i < N_LEGS; i++) {

@@ -9,6 +9,7 @@
 #include <gsl/gsl_interp.h>
 #include <gsl/gsl_spline.h>
 #include <mth.h>
+#include <stance.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -131,7 +132,7 @@ static void plan_adjust_z(plan_t *self, double z)
 
 	double mod_z = *self->cur->z + gsl_vector_get(self->adj, 2) + z;
 	/*printf("%g:%g:%g::%g\n", *self->cur->z, gsl_vector_get(self->adj, 2), z,*/
-		   /*mod_z);*/
+	/*mod_z);*/
 
 	if (mod_z < g_model->max_dip) {
 		mod_z = g_model->max_dip - mod_z;

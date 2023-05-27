@@ -87,6 +87,7 @@ typedef struct model {
 	double link_len; ///< 		Length of single leg link
 	double soft_hit_thr; ///< 	Treshold for soft hit
 	double mass; ///< 			Total mass of the model
+	double leg_exc; ///< 		Legs excentricity
 	int cw[4]; ///< 			Clock-wise seg sequence
 } model_t;
 
