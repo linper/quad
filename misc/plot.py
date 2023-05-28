@@ -6,11 +6,30 @@ import numpy as np
 
 
 def plot_data(msg):
-    if msg.get("type") == "heat":
-        data = np.array(msg.get("data"))
-        c = plt.imshow(data.T, cmap="hot", interpolation="nearest")
-        plt.colorbar(c)
-        plt.show()
+    for m in msg:
+        if m.get("type") == "heat":
+            tick = m.get("tick")
+            data = np.array(m.get("data"))
+            extents = (-data.shape[0] / 2 * tick, data.shape[0] /
+                       2 * tick, -data.shape[1] / 2 * tick, data.shape[1] / 2 * tick)
+            c = plt.imshow(data.T, cmap="hot",
+                           interpolation="nearest", extent=extents)
+            plt.colorbar(c)
+        elif m.get("type") == "scatter":
+            x_data = np.array(m.get("x"))
+            y_data = np.array(m.get("y"))
+            color = m.get("color")
+            label = m.get("label")
+            plt.scatter(x_data, y_data, color=color, label=label)
+        elif m.get("type") == "plot":
+            x_data = np.array(m.get("x"))
+            y_data = np.array(m.get("y"))
+            color = m.get("color")
+            label = m.get("label")
+            plt.plot(x_data, y_data, color=color, label=label)
+
+    plt.legend()
+    plt.show()
 
 
 if __name__ == "__main__":
