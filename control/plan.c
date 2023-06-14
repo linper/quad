@@ -64,7 +64,7 @@ static int gradual_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, double dist_st,
 	}
 
 	vels_ps = block_linspace(d1->vps, d2->vps, d2->ts - d1->ts + 1);
-	dists = gsl_block_calloc(d2->ts - d1->ts + 1);
+	dists = block_calloc(d2->ts - d1->ts + 1);
 
 	for (size_t i = 0; i < vels_ps->size; i++) {
 		vel = vels_ps->data[i];
@@ -586,9 +586,6 @@ dpt_t *dpt_new(const double pos[3], double ts, double vps)
 	}
 
 	p->pos = vector_from_array(3, pos);
-	if (!p->pos) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
 
 	p->x = gsl_vector_ptr(p->pos, 0);
 	p->y = gsl_vector_ptr(p->pos, 1);
@@ -610,9 +607,6 @@ dpt_t *dpt_new2(gsl_vector *pos, double ts, double vps)
 	}
 
 	p->pos = vector_clone(pos);
-	if (!p->pos) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
 
 	p->x = gsl_vector_ptr(p->pos, 0);
 	p->y = gsl_vector_ptr(p->pos, 1);
@@ -715,18 +709,17 @@ int plan_new(plan_t *p)
 	glist_set_free_cb(p->raw_pts, (void (*)(void *))dpt_free);
 	p->pts = glist_new(16);
 	glist_set_free_cb(p->pts, (void (*)(void *))dpt_free);
-	p->adj = gsl_vector_calloc(3);
+	p->adj = vector_calloc(3);
 
-	p->dists = gsl_block_calloc(START_N_STEPS);
-	p->vels = gsl_block_calloc(START_N_STEPS);
+	p->dists = block_calloc(START_N_STEPS);
+	p->vels = block_calloc(START_N_STEPS);
 
 	p->acc = gsl_interp_accel_alloc();
 
 	p->fsm =
 		fsm_new((unsigned *)lfsm_states, lfsm_funcs, LFSMS_MAX, LFSMA_MAX, l);
 
-	if (!p->cur || !p->raw_pts || !p->pts || !p->adj || !p->dists || !p->vels ||
-		!p->acc || !p->fsm) {
+	if (!p->cur || !p->raw_pts || !p->pts || !p->acc || !p->fsm) {
 		return 1;
 	}
 

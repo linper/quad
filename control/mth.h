@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "log.h"
 #include <stdbool.h>
 #include <math.h>
 
@@ -43,6 +44,7 @@ void vbuf_clear(vbuf_t *b);
 gsl_matrix *matrix_from_array(size_t n_rows, size_t n_cols, const double *arr);
 int matrix_update_array(gsl_matrix *m, size_t n_rows, size_t n_cols,
 						const double *arr);
+gsl_matrix *matrix_del_row_n(gsl_matrix *m, size_t idx);
 int matrix_add_vec_rows(gsl_matrix *m, gsl_vector *v);
 int matrix_sub_vec_rows(gsl_matrix *m, gsl_vector *v);
 gsl_vector *matrix_sum_axis(gsl_matrix *m, int axis);
@@ -127,9 +129,25 @@ static inline bool ellipse_line_intersect2(double a, double b, double k,
 								  gsl_vector_ptr(p2, 1));
 }
 
+static inline gsl_matrix *matrix_calloc(size_t n1, size_t n2)
+{
+	gsl_matrix *m = gsl_matrix_calloc(n1, n2);
+	if (!m)
+		FATAL(ERR_PARSE_FAIL);
+	return m;
+}
+
 static inline int matrix_copy_to_origin(gsl_matrix *dst, gsl_matrix *src)
 {
 	return matrix_copy_to(dst, src, 0, 0, 0, 0, src->size1, src->size2);
+}
+
+static inline gsl_vector *vector_calloc(size_t n)
+{
+	gsl_vector *v = gsl_vector_calloc(n);
+	if (!v)
+		FATAL(ERR_PARSE_FAIL);
+	return v;
 }
 
 static inline double vector_mean(gsl_vector *v)
@@ -150,6 +168,14 @@ static inline double vector3_angle(gsl_vector *a, gsl_vector *b)
 static inline int vector_copy_to_origin(gsl_vector *dst, gsl_vector *src)
 {
 	return vector_copy_to(dst, src, 0, 0, src->size);
+}
+
+static inline gsl_block *block_calloc(size_t n)
+{
+	gsl_block *b = gsl_block_calloc(n);
+	if (!b)
+		FATAL(ERR_PARSE_FAIL);
+	return b;
 }
 
 static inline void block_mul_constant(gsl_block *b, double val)

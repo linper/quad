@@ -36,7 +36,7 @@ void vbuf_free(vbuf_t *b)
 
 vbuf_t *vbuf_create(size_t cap)
 {
-	gsl_block *b = gsl_block_calloc(cap);
+	gsl_block *b = block_calloc(cap);
 	vbuf_t *vb = calloc(1, sizeof(vbuf_t));
 	if (!b || !vb) {
 		FATAL(ERR_MALLOC_FAIL);
@@ -153,16 +153,11 @@ void vbuf_clear(vbuf_t *b)
 
 gsl_matrix *matrix_from_array(size_t n_rows, size_t n_cols, const double *arr)
 {
-	gsl_matrix *m;
-
 	if (!arr) {
 		return NULL;
 	}
 
-	m = gsl_matrix_calloc(n_rows, n_cols);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	gsl_matrix *m = matrix_calloc(n_rows, n_cols);
 
 	for (size_t i = 0; i < n_rows; i++) {
 		memcpy(m->data + i * m->tda, arr + i * n_cols, n_cols * sizeof(double));
@@ -187,10 +182,10 @@ int matrix_update_array(gsl_matrix *m, size_t n_rows, size_t n_cols,
 
 gsl_matrix *matrix_clone(gsl_matrix *m)
 {
-	gsl_matrix *c = gsl_matrix_calloc(m->size1, m->size2);
 	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
+		return NULL;
 	}
+	gsl_matrix *c = matrix_calloc(m->size1, m->size2);
 
 	gsl_matrix_memcpy(c, m);
 
@@ -199,16 +194,11 @@ gsl_matrix *matrix_clone(gsl_matrix *m)
 
 gsl_matrix *matrix_sub_n(gsl_matrix *a, gsl_matrix *b)
 {
-	gsl_matrix *m;
-
 	if (!a || !b) {
 		return NULL;
 	}
 
-	m = gsl_matrix_calloc(a->size1, a->size2);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	gsl_matrix *m = matrix_calloc(a->size1, a->size2);
 
 	gsl_matrix_memcpy(m, a);
 
@@ -219,16 +209,11 @@ gsl_matrix *matrix_sub_n(gsl_matrix *a, gsl_matrix *b)
 
 gsl_matrix *matrix_add_n(gsl_matrix *a, gsl_matrix *b)
 {
-	gsl_matrix *m;
-
 	if (!a || !b) {
 		return NULL;
 	}
 
-	m = gsl_matrix_calloc(a->size1, a->size2);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	gsl_matrix *m = matrix_calloc(a->size1, a->size2);
 
 	gsl_matrix_memcpy(m, a);
 
@@ -239,16 +224,11 @@ gsl_matrix *matrix_add_n(gsl_matrix *a, gsl_matrix *b)
 
 gsl_matrix *matrix_mul_n(gsl_matrix *a, gsl_matrix *b)
 {
-	gsl_matrix *m;
-
 	if (!a || !b) {
 		return NULL;
 	}
 
-	m = gsl_matrix_calloc(a->size1, a->size2);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	gsl_matrix *m = matrix_calloc(a->size1, a->size2);
 
 	gsl_matrix_memcpy(m, a);
 
@@ -259,16 +239,11 @@ gsl_matrix *matrix_mul_n(gsl_matrix *a, gsl_matrix *b)
 
 gsl_matrix *matrix_div_n(gsl_matrix *a, gsl_matrix *b)
 {
-	gsl_matrix *m;
-
 	if (!a || !b) {
 		return NULL;
 	}
 
-	m = gsl_matrix_calloc(a->size1, a->size2);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	gsl_matrix *m = matrix_calloc(a->size1, a->size2);
 
 	gsl_matrix_memcpy(m, a);
 
@@ -279,10 +254,11 @@ gsl_matrix *matrix_div_n(gsl_matrix *a, gsl_matrix *b)
 
 gsl_matrix *matrix_scale_n(gsl_matrix *v, const double l)
 {
-	gsl_matrix *c = matrix_clone(v);
-	if (!c) {
-		FATAL(ERR_MALLOC_FAIL);
+	if (!v) {
+		return NULL;
 	}
+
+	gsl_matrix *c = matrix_clone(v);
 
 	gsl_matrix_scale(c, l);
 
@@ -291,10 +267,12 @@ gsl_matrix *matrix_scale_n(gsl_matrix *v, const double l)
 
 gsl_matrix *matrix_add_constant_n(gsl_matrix *v, const double l)
 {
-	gsl_matrix *c = matrix_clone(v);
-	if (!c) {
-		FATAL(ERR_MALLOC_FAIL);
+	if (!v) {
+		return NULL;
+		;
 	}
+
+	gsl_matrix *c = matrix_clone(v);
 
 	gsl_matrix_add_constant(c, l);
 
@@ -312,10 +290,7 @@ gsl_matrix *matrix_linspace(gsl_vector *start, gsl_vector *end, size_t n)
 
 	cur = vector_clone(start);
 	inc = vector_clone(end);
-	m = gsl_matrix_calloc(n, start->size);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	m = matrix_calloc(n, start->size);
 
 	if (n > 1) {
 		gsl_vector_sub(inc, start);
@@ -350,6 +325,27 @@ int matrix_copy_to(gsl_matrix *dst, gsl_matrix *src, size_t di, size_t dj,
 	}
 
 	return 0;
+}
+
+gsl_matrix *matrix_del_row_n(gsl_matrix *m, size_t idx)
+{
+	if (!m || m->size1 <= idx || m->size1 == 1) {
+		ERR(ERR_INVALID_INPUT);
+		return NULL;
+	}
+
+	gsl_matrix *d = matrix_calloc(m->size1 - 1, m->size2);
+
+
+	for (size_t i = 0, j = 0; i < m->size1; i++) {
+		if (i != idx) {
+			memcpy(d->data + d->tda * j, m->data + d->tda * i,
+				   m->tda * sizeof(double));
+			j++;
+		}
+	}
+
+	return d;
 }
 
 int matrix_add_vec_rows(gsl_matrix *m, gsl_vector *v)
@@ -395,10 +391,7 @@ gsl_vector *matrix_sum_axis(gsl_matrix *m, int axis)
 	}
 
 	if (!axis) {
-		v = gsl_vector_calloc(m->size2);
-		if (!v) {
-			FATAL(ERR_MALLOC_FAIL);
-		}
+		v = vector_calloc(m->size2);
 
 		for (size_t i = 0; i < m->size1; i++) {
 			for (size_t j = 0; j < m->size2; j++) {
@@ -407,10 +400,7 @@ gsl_vector *matrix_sum_axis(gsl_matrix *m, int axis)
 		}
 
 	} else {
-		v = gsl_vector_calloc(m->size1);
-		if (!v) {
-			FATAL(ERR_MALLOC_FAIL);
-		}
+		v = vector_calloc(m->size1);
 
 		for (size_t i = 0; i < m->size1; i++) {
 			for (size_t j = 0; j < m->size2; j++) {
@@ -431,10 +421,7 @@ gsl_matrix *matrix_dot(gsl_matrix *a, gsl_matrix *b)
 		return NULL;
 	}
 
-	m = gsl_matrix_calloc(a->size1, b->size2);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	m = matrix_calloc(a->size1, b->size2);
 	for (size_t i = 0; i < m->size1; i++) {
 		for (size_t j = 0; j < m->size2; j++) {
 			ai = gsl_matrix_get(a, i, 0);
@@ -462,10 +449,7 @@ gsl_vector *matrix_vector_dot(gsl_matrix *a, gsl_vector *b)
 		return NULL;
 	}
 
-	m = gsl_vector_calloc(b->size);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	m = vector_calloc(b->size);
 
 	for (size_t i = 0; i < b->size; i++) {
 		temp = 0.0;
@@ -522,22 +506,17 @@ void matrix_print(gsl_matrix *m)
 
 gsl_vector *vector_from_array(size_t n, const double *arr)
 {
-	gsl_vector *m;
-
-	if (!arr) {
-		return NULL;
+	if (!n || !arr) {
+		FATAL(ERR_INVALID_INPUT);
 	}
 
-	m = gsl_vector_calloc(n);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	gsl_vector *v = vector_calloc(n);
 
 	for (size_t i = 0; i < n; i++) {
-		m->data[i * m->stride] = arr[i];
+		v->data[i * v->stride] = arr[i];
 	}
 
-	return m;
+	return v;
 }
 
 int vector_update_array(gsl_vector *v, size_t n, const double *arr)
@@ -555,11 +534,11 @@ int vector_update_array(gsl_vector *v, size_t n, const double *arr)
 
 gsl_vector *vector_clone(gsl_vector *v)
 {
-	gsl_vector *c = gsl_vector_calloc(v->size);
 	if (!v) {
-		FATAL(ERR_MALLOC_FAIL);
+		FATAL(ERR_INVALID_INPUT);
 	}
 
+	gsl_vector *c = vector_calloc(v->size);
 	gsl_vector_memcpy(c, v);
 
 	return c;
@@ -575,10 +554,7 @@ gsl_vector *vector_linspace(double start, double end, size_t n)
 		return NULL;
 	}
 
-	v = gsl_vector_calloc(n);
-	if (!v) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	v = vector_calloc(n);
 
 	if (n > 1) {
 		inc = (end - start) / (n - 1);
@@ -828,17 +804,11 @@ gsl_matrix *mat_rot_from_2vec(gsl_vector *from, gsl_vector *to)
 
 gsl_vector *vector_sub_n(gsl_vector *a, gsl_vector *b)
 {
-	gsl_vector *m;
-
 	if (!a || !b) {
 		return NULL;
 	}
 
-	m = gsl_vector_calloc(a->size);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
-
+	gsl_vector *m = vector_calloc(a->size);
 	gsl_vector_memcpy(m, a);
 
 	gsl_vector_sub(m, b);
@@ -854,10 +824,7 @@ gsl_vector *vector_add_n(gsl_vector *a, gsl_vector *b)
 		return NULL;
 	}
 
-	m = gsl_vector_calloc(a->size);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	m = vector_calloc(a->size);
 
 	gsl_vector_memcpy(m, a);
 
@@ -874,10 +841,7 @@ gsl_vector *vector_mul_n(gsl_vector *a, gsl_vector *b)
 		return NULL;
 	}
 
-	m = gsl_vector_calloc(a->size);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	m = vector_calloc(a->size);
 
 	gsl_vector_memcpy(m, a);
 
@@ -894,10 +858,7 @@ gsl_vector *vector_div_n(gsl_vector *a, gsl_vector *b)
 		return NULL;
 	}
 
-	m = gsl_vector_calloc(a->size);
-	if (!m) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	m = vector_calloc(a->size);
 
 	gsl_vector_memcpy(m, a);
 
@@ -969,7 +930,7 @@ gsl_block *block_from_array(size_t n, const double *arr)
 		return NULL;
 	}
 
-	m = gsl_block_calloc(n);
+	m = block_calloc(n);
 	if (!m) {
 		FATAL(ERR_MALLOC_FAIL);
 	}
@@ -1018,7 +979,7 @@ gsl_block *block_linspace(double start, double end, size_t n)
 		return NULL;
 	}
 
-	b = gsl_block_calloc(n);
+	b = block_calloc(n);
 	if (!b) {
 		FATAL(ERR_MALLOC_FAIL);
 	}

@@ -79,18 +79,12 @@ static sens_t *alloc_sens()
 		FATAL(ERR_MALLOC_FAIL);
 	}
 
-	s->balance = gsl_block_calloc(4);
-	s->bfo_mat = gsl_matrix_calloc(3, 3);
-	s->touch_f = gsl_block_calloc(4);
-	s->damp = gsl_block_calloc(4);
-	s->bf_vec = gsl_vector_calloc(3);
-	s->tf_pos = gsl_vector_calloc(3);
-
-	if (!s->touch_f || !s->damp || !s->bf_vec || !s->bfo_mat || !s->tf_pos) {
-		ERR(ERR_PARSE_FAIL);
-		sens_free(s);
-		return NULL;
-	}
+	s->balance = block_calloc(4);
+	s->bfo_mat = matrix_calloc(3, 3);
+	s->touch_f = block_calloc(4);
+	s->damp = block_calloc(4);
+	s->bf_vec = vector_calloc(3);
+	s->tf_pos = vector_calloc(3);
 
 	return s;
 }
@@ -380,11 +374,10 @@ static leg_t *leg_from_json(struct json_object *j)
 	l->base_off = vector_from_array(3, bo);
 	l->dir = vector_from_array(3, d);
 	l->joint_lims = vector_from_array(6, jl);
-	l->angles = gsl_vector_calloc(3);
+	l->angles = vector_calloc(3);
 	res |= plan_new(&l->plan);
 
-	if (!l->pos || !l->def_pos || !l->base_off || !l->dir || !l->joint_lims ||
-		res) {
+	if (res) {
 		goto err;
 	}
 
@@ -650,10 +643,7 @@ int model_from_json(struct json_object *j)
 		mod->cw_legs[i]->cw_next = mod->cw_legs[(i + 1) % N_LEGS];
 	}
 
-	mod->angles = gsl_matrix_calloc(4, 3);
-	if (!mod->angles) {
-		goto err;
-	}
+	mod->angles = matrix_calloc(4, 3);
 
 	// Free previous model
 	model_free(g_model);

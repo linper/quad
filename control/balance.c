@@ -88,12 +88,12 @@ static void get_bal_base(gsl_block *res, double cof)
 
 	printf("---------------------------------------------\n");
 
-	bfo_mat = gsl_matrix_calloc(4, 4);
+	bfo_mat = matrix_calloc(4, 4);
 	gsl_matrix_set_identity(bfo_mat);
 	matrix_copy_to_origin(bfo_mat, s->bfo_mat);
 
-	leg_pos_mod = gsl_vector_calloc(4);
-	height_mat = gsl_matrix_calloc(4, 4);
+	leg_pos_mod = vector_calloc(4);
+	height_mat = matrix_calloc(4, 4);
 	gsl_matrix_set_identity(height_mat);
 
 	// making shift matrix in z axis
@@ -150,11 +150,11 @@ int calc_balance()
 
 	gsl_block *imp_diff, *base_part, *touch_diff, *drop_diff, *shock_diff;
 
-	base_part = gsl_block_calloc(N_LEGS);
-	drop_diff = gsl_block_calloc(N_LEGS);
-	touch_diff = gsl_block_calloc(N_LEGS);
-	shock_diff = gsl_block_calloc(N_LEGS);
-	imp_diff = gsl_block_calloc(N_LEGS);
+	base_part = block_calloc(N_LEGS);
+	drop_diff = block_calloc(N_LEGS);
+	touch_diff = block_calloc(N_LEGS);
+	shock_diff = block_calloc(N_LEGS);
+	imp_diff = block_calloc(N_LEGS);
 
 	get_bal_base(base_part, BASE_PART_COF);
 	get_touch_diff(drop_diff, touch_diff);
