@@ -1,4 +1,6 @@
 control/control
 tags
 *.o
+*.json
+*.png
 sim/__pycache__

@@ -36,6 +36,7 @@
 #define LEG_ELLIPSE_B 0.18
 
 struct stance;
+struct movement;
 
 typedef struct stance {
 	struct stance *next;
@@ -54,6 +55,17 @@ typedef struct stance {
 	gsl_vector *mod_bcom; // (2)
 } stance_t;
 
+typedef struct movement {
+	struct stance *st;
+	size_t n;
+	double loss;
+	gsl_matrix *coms; // (n, 2)
+	gsl_matrix *bcoms; // (n, 2)
+	gsl_matrix *mod_bcoms; // (n, 2)
+} movement_t;
+
+static stance_t *stance_optimize(stance_t *self, size_t n);
+static void stance_plot(stance_t *self);
 static size_t plot_id = 0;
 
 static void stance_free(stance_t *self, bool all)
@@ -79,6 +91,19 @@ static void stance_free(stance_t *self, bool all)
 	}
 }
 
+static void movement_free(movement_t *self)
+{
+	if (!self) {
+		return;
+	}
+
+	gsl_matrix_free(self->bcoms);
+	gsl_matrix_free(self->coms);
+	gsl_matrix_free(self->mod_bcoms);
+	stance_free(self->st, true);
+	free(self);
+}
+
 static stance_t *stance_create_from_model(gsl_vector *dir, gsl_vector *com)
 {
 	stance_t *st = calloc(1, sizeof(stance_t));
@@ -97,9 +122,9 @@ static stance_t *stance_create_from_model(gsl_vector *dir, gsl_vector *com)
 
 	for (size_t i = 0; i < N_LEGS; i++) {
 		for (size_t j = 0; j < 2; j++) {
-			gsl_matrix_set(st->pts, i, j, g_model->legs[i]->pos->data[j]);
+			gsl_matrix_set(st->pts, i, j, g_model->cw_legs[i]->pos->data[j]);
 			gsl_matrix_set(st->def_pts, i, j,
-						   g_model->legs[i]->def_pos->data[j]);
+						   g_model->cw_legs[i]->def_pos->data[j]);
 		}
 	}
 
@@ -152,60 +177,35 @@ static stance_t *stance_append_create(stance_t *s)
 	return st;
 }
 
-static void calc_com(gsl_matrix *pts, gsl_vector *ans)
+static movement_t *create_movement(size_t n, gsl_vector *dir, gsl_vector *com)
 {
-	gsl_matrix *com_pts = matrix_calloc(N_LEGS, 2);
+	stance_t *ss;
 
-	for (size_t i = 0; i < N_LEGS; i++) {
-		matrix_copy_to(com_pts, pts, i, 0, g_model->cw[i], 0, 1, 2);
+	movement_t *mv = calloc(1, sizeof(movement_t));
+	if (!mv) {
+		FATAL(ERR_MALLOC_FAIL);
 	}
-	centroid_of_polygon(ans, com_pts);
 
-	gsl_matrix_free(com_pts);
+	mv->st = stance_create_from_model(dir, com);
+
+	ss = mv->st;
+	mv->n = n + 1;
+	stance_optimize(mv->st, n);
+	while (ss->next) {
+		(void)stance_plot;
+		/*stance_plot(ss->next);*/
+		ss = ss->next;
+	}
+
+	return mv;
 }
 
 static void calc_bcom(gsl_matrix *pts, int pidx, gsl_vector *ans)
 {
-	gsl_matrix *bcom_pts = matrix_calloc(pidx == -1 ? N_LEGS : N_LEGS - 1, 2);
-
-	size_t bcpc = 0;
-	for (int i = 0; i < N_LEGS; i++) {
-		if (i != pidx) {
-			matrix_copy_to(bcom_pts, pts, bcpc++, 0, g_model->cw[i], 0, 1, 2);
-		}
-	}
-
+	gsl_matrix *bcom_pts = matrix_del_row_n(pts, pidx);
 	centroid_of_polygon(ans, bcom_pts);
-
 	gsl_matrix_free(bcom_pts);
 }
-
-/*static void calc_coms(stance_t *st)*/
-/*{*/
-/*(void)calc_bcom;*/
-/*(void)calc_com;*/
-/*gsl_matrix *com_off_pts = matrix_calloc(N_LEGS, 2);*/
-/*gsl_matrix *bcom_pts = matrix_calloc(N_LEGS - 1, 2);*/
-
-/*for (size_t i = 0; i < N_LEGS; i++) {*/
-/*matrix_copy_to(com_off_pts, st->pts, i, 0, g_model->cw[i], 0, 1, 2);*/
-/*}*/
-
-/*size_t bcpc = 0;*/
-/*for (size_t i = 0; i < N_LEGS; i++) {*/
-/*if (i != st->pidx) {*/
-/*matrix_copy_to(bcom_pts, st->pts, bcpc++, 0, g_model->cw[i], 0, 1,*/
-/*2);*/
-/*}*/
-/*}*/
-
-/*centroid_of_polygon(st->com_off, com_off_pts);*/
-/*// No need to roder legs clockwise, because 3 points are alway - triangle*/
-/*centroid_of_polygon(st->bcom, bcom_pts);*/
-
-/*gsl_matrix_free(com_off_pts);*/
-/*gsl_matrix_free(bcom_pts);*/
-/*}*/
 
 static gsl_matrix *guess_start_pos(gsl_vector_view off, gsl_vector *d, size_t n)
 {
@@ -243,30 +243,29 @@ static gsl_matrix *guess_start_pos(gsl_vector_view off, gsl_vector *d, size_t n)
 	return pts;
 }
 
-static void eval_support_shape(stance_t *st, double *val)
+static void eval_st_support_shape(stance_t *st, double *val)
 {
 	int max_ps_coaf = 16;
-	int cw[N_LEGS] = { 0, 1, 3, 2 };
-	double cw_pts[N_LEGS][2] = { 0 };
+	double pts[N_LEGS][2] = { 0 };
 	double pair1[2], pair2[2];
 	double surface, perimeter = 0.0;
 	gsl_vector_view p1, p2;
 
 	for (size_t i = 0; i < N_LEGS; i++) {
 		// clockwise points adjusted by default leg excentricity
-		p1 = gsl_matrix_row(st->pts, cw[i]);
-		p2 = gsl_matrix_row(st->pts, (cw[i] + 1) / N_LEGS);
-		cw_pts[i][0] = gsl_vector_get(&p1.vector, 0) * g_model->leg_exc;
-		cw_pts[i][1] = gsl_vector_get(&p1.vector, 1) * 1.0;
+		p1 = gsl_matrix_row(st->pts, i);
+		p2 = gsl_matrix_row(st->pts, (i + 1) / N_LEGS);
+		pts[i][0] = gsl_vector_get(&p1.vector, 0) * g_model->leg_exc;
+		pts[i][1] = gsl_vector_get(&p1.vector, 1) * 1.0;
 
 		perimeter += vector_dist(&p1.vector, &p2.vector);
 	}
 
-	pair1[0] = area(cw_pts[0], cw_pts[1], cw_pts[2]);
-	pair1[1] = area(cw_pts[2], cw_pts[3], cw_pts[0]);
+	pair1[0] = area(pts[0], pts[1], pts[2]);
+	pair1[1] = area(pts[2], pts[3], pts[0]);
 
-	pair2[0] = area(cw_pts[1], cw_pts[2], cw_pts[3]);
-	pair2[1] = area(cw_pts[3], cw_pts[0], cw_pts[1]);
+	pair2[0] = area(pts[1], pts[2], pts[3]);
+	pair2[1] = area(pts[3], pts[0], pts[1]);
 
 	surface = (pair1[0] + pair1[1] + pair2[0] + pair2[1]) / 2;
 
@@ -274,7 +273,7 @@ static void eval_support_shape(stance_t *st, double *val)
 		*val = 1 - ((max_ps_coaf * surface) / (perimeter * perimeter));
 }
 
-static void eval_avg_move_dir(stance_t *st, double *val)
+static void eval_st_avg_move_dir(stance_t *st, double *val)
 {
 	gsl_vector *avg_pos_diff, *apd_vec;
 
@@ -294,7 +293,7 @@ static void eval_avg_move_dir(stance_t *st, double *val)
 		*val = ap_part;
 }
 
-static void eval_sequence(stance_t *st, double *avg_val, double *edge_val)
+static void eval_st_sequence(stance_t *st, double *avg_val, double *edge_val)
 {
 	double edge_retr_vals[N_LEGS] = { 0 };
 	double max_d = 0.0, ins_val, lox, loy, k, b, edge_part, avg_part;
@@ -387,7 +386,7 @@ end:
 		*avg_val = avg_part;
 }
 
-static void eval_min_prox(stance_t *st, double *val)
+static void eval_st_min_prox(stance_t *st, double *val)
 {
 	const double k = -30.0, r = 0.006;
 	double px, py, x, y, dist, min_dist = DBL_MAX;
@@ -411,28 +410,60 @@ static void eval_min_prox(stance_t *st, double *val)
 
 static double stance_loss(stance_t *st)
 {
-#define PROX_C 0.1
-#define AVG_C 0.6
-#define EDGE_C 0.5
-#define AP_DIR_C 0.35
-#define SUP_TRI_C 0.15
+	const double PROX_C = 0.1;
+	const double AVG_C = 0.6;
+	const double EDGE_C = 0.5;
+	const double AP_DIR_C = 0.35;
+	const double SUP_TRI_C = 0.15;
 
 	double val, prox_part, avg_part, apd_part, edge_part, sup_shp_part;
 
-	eval_min_prox(st, &prox_part);
+	eval_st_min_prox(st, &prox_part);
 	prox_part *= PROX_C;
 
-	eval_sequence(st, &avg_part, &edge_part);
+	eval_st_sequence(st, &avg_part, &edge_part);
 	avg_part *= AVG_C;
 	edge_part *= EDGE_C;
 
-	eval_avg_move_dir(st, &apd_part);
+	eval_st_avg_move_dir(st, &apd_part);
 	apd_part *= AP_DIR_C;
 
-	eval_support_shape(st, &sup_shp_part);
+	eval_st_support_shape(st, &sup_shp_part);
 	sup_shp_part *= SUP_TRI_C;
+	(void)sup_shp_part;
 
-	val = prox_part + avg_part + edge_part + sup_shp_part + apd_part;
+	/*val = prox_part + avg_part + edge_part + sup_shp_part + apd_part;*/
+	val = prox_part + avg_part + edge_part + apd_part;
+	/*val = prox_part + sup_shp_part;*/
+
+	return val;
+}
+
+static void eval_mv_com_diff(movement_t *mv, double *val)
+{
+	double sum = 0.0;
+	for (size_t i = 0; i < mv->n; i++) {
+		gsl_vector_view v1 = gsl_matrix_row(mv->coms, i);
+		gsl_vector_view v2 = gsl_matrix_row(mv->mod_bcoms, i);
+		sum += vector_dist(&v1.vector, &v2.vector);
+	}
+
+	sum /= mv->n;
+
+	if (val)
+		*val = sum;
+}
+
+static double movement_loss(movement_t *mv)
+{
+	const double CDIF_C = 1.0;
+
+	double val, len_part;
+
+	eval_mv_com_diff(mv, &len_part);
+	len_part *= CDIF_C;
+
+	val = len_part;
 
 	return val;
 }
@@ -440,7 +471,7 @@ static double stance_loss(stance_t *st)
 static int stance_grad(stance_t *st, gsl_matrix *spts, gsl_matrix *grad,
 					   gsl_vector *losses)
 {
-#define DELTA 1e-5
+	const double DELTA = 1e-5;
 
 	gsl_matrix *pts_save;
 	double base_loss, var_loss;
@@ -474,10 +505,10 @@ static int stance_grad(stance_t *st, gsl_matrix *spts, gsl_matrix *grad,
 
 static int get_optimal_step(stance_t *st, gsl_vector *pt, double *loss)
 {
-#define MAX_GD_ITER 25
-#define EPSILON 1e-3
-#define ALPHA 0.01
-#define N_START_PTS 6
+	const double MAX_ST_GD_ITER = 25;
+	const double EPSILON = 1e-3;
+	const double N_START_PTS = 6;
+	const double ALPHA = 0.01;
 
 	gsl_matrix *spts, *grad;
 	gsl_vector_view row, res_row;
@@ -494,7 +525,7 @@ static int get_optimal_step(stance_t *st, gsl_vector *pt, double *loss)
 	gsl_vector_set_all(losses, DBL_MAX);
 	prev_losses = vector_clone(losses);
 
-	for (size_t i = 0; i < MAX_GD_ITER; i++) {
+	for (size_t i = 0; i < MAX_ST_GD_ITER; i++) {
 		stance_grad(st, spts, grad, losses);
 		gsl_matrix_scale(grad, ALPHA);
 		gsl_matrix_sub(spts, grad);
@@ -521,7 +552,58 @@ static int get_optimal_step(stance_t *st, gsl_vector *pt, double *loss)
 	return 0;
 }
 
-static stance_t *optimize(stance_t *self, size_t n)
+static int movement_grad(movement_t *mv, gsl_matrix *grad, double *loss)
+{
+	const double DELTA = 1e-5;
+
+	double var_loss;
+
+	*loss = movement_loss(mv);
+	for (size_t i = 0; i < grad->size1; i++) {
+		for (size_t j = 0; j < grad->size2; j++) {
+			*gsl_matrix_ptr(mv->mod_bcoms, i, j) += DELTA;
+
+			var_loss = movement_loss(mv);
+			gsl_matrix_set(grad, i, j, (var_loss - *loss) / DELTA);
+
+			// restoring
+			*gsl_matrix_ptr(mv->mod_bcoms, i, j) -= DELTA;
+		}
+	}
+
+	return 0;
+}
+
+static int movement_optimize(movement_t *mv)
+{
+	const double MAX_MV_GD_ITER = 50;
+	const double ALPHA = 0.05;
+	const double EPSILON = 1e-3;
+
+	gsl_matrix *grad;
+	double loss = DBL_MAX, prev_loss = DBL_MAX;
+
+	grad = matrix_calloc(mv->n, 2);
+
+	for (size_t iter = 0; iter < MAX_MV_GD_ITER; iter++) {
+		movement_grad(mv, grad, &loss);
+		printf("mov iter:%ld loss:%.6g\n", iter, loss);
+
+		gsl_matrix_scale(grad, ALPHA);
+		gsl_matrix_sub(mv->mod_bcoms, grad);
+
+		prev_loss -= loss;
+		if (EPSILON * ALPHA > prev_loss) {
+			break;
+		}
+
+		prev_loss = loss;
+	}
+
+	return 0;
+}
+
+static stance_t *stance_optimize(stance_t *self, size_t n)
 {
 	double min_loss, loss;
 	size_t min_idx = 0;
@@ -531,7 +613,8 @@ static stance_t *optimize(stance_t *self, size_t n)
 	min_pt = vector_calloc(2);
 	pt = vector_calloc(2);
 
-	calc_bcom(self->pts, -1, self->bcom);
+	/*calc_bcom(self->pts, -1, self->bcom);*/
+	centroid_of_polygon(self->bcom, self->pts);
 
 	for (size_t ni = 0; ni < n; ni++) {
 		// Add
@@ -557,7 +640,7 @@ static stance_t *optimize(stance_t *self, size_t n)
 		printf("loss:%.4g pidx:%ld\n", loss, min_idx);
 
 		com_off = vector_calloc(2);
-		calc_com(self->pts, com_off);
+		centroid_of_polygon(com_off, self->pts);
 		calc_bcom(self->pts, self->pidx, self->bcom);
 
 		matrix_sub_vec_rows(self->pts, com_off);
@@ -573,8 +656,8 @@ static stance_t *optimize(stance_t *self, size_t n)
 
 static void stance_plot(stance_t *self)
 {
-#define N_EDGE 72
-#define INC 0.01
+	const double N_EDGE = 72;
+	const double INC = 0.01;
 
 	gsl_matrix *heat = matrix_calloc(N_EDGE, N_EDGE);
 
@@ -648,41 +731,19 @@ static void stance_plot(stance_t *self)
 	system(buf);
 }
 
-static void movement_plot(stance_t *self)
+static void movement_plot(movement_t *self)
 {
-	stance_t *st = self;
-	size_t n = 1, i = 0, ci = 0, bi = 0;
+	stance_t *st = self->st;
+	size_t n = 1, i = 0;
 	json_object *base_j, *entry_j, *arr_j;
 
 	while ((st = st->next))
 		n++;
 
-	gsl_vector *com_off_sum = vector_calloc(2);
+	base_j = json_object_new_array_ext(2 * self->n + 3);
 
-	base_j = json_object_new_array_ext(2 * n + 2);
-
-	gsl_matrix *mod_bcoms = matrix_calloc(n, 2);
-	gsl_matrix *mod_coms = matrix_calloc(n, 2);
-
-	st = self;
+	st = self->st;
 	while (st) {
-		matrix_copy_to_origin(st->mod_pts, st->pts);
-		vector_copy_to_origin(st->mod_bcom, st->bcom);
-		vector_copy_to_origin(st->mod_com, st->com);
-
-		matrix_sub_vec_rows(st->mod_pts, com_off_sum);
-
-		gsl_vector_view vc = gsl_matrix_row(mod_coms, ci++);
-		calc_com(st->mod_pts, &vc.vector);
-		gsl_vector_view bvc = gsl_matrix_row(mod_bcoms, bi++);
-		if (st->prev) {
-			calc_bcom(st->mod_pts, st->pidx, &bvc.vector);
-		} else {
-			calc_com(st->mod_pts, &bvc.vector);
-		}
-
-		gsl_matrix_swap_rows(st->mod_pts, 2, 3);
-
 		if (st->prev) {
 			entry_j = json_object_new_object();
 			json_object_object_add(entry_j, "type",
@@ -710,34 +771,30 @@ static void movement_plot(stance_t *self)
 		free(label);
 		json_object_array_put_idx(base_j, i++, entry_j);
 
-		if (st->next) {
-			int not_pidx = !st->next->pidx;
-			gsl_vector_view np_nrow = gsl_matrix_row(st->next->pts, not_pidx);
-			gsl_vector_add(com_off_sum, &np_nrow.vector);
-			gsl_vector_view np_row = gsl_matrix_row(st->pts, not_pidx);
-			gsl_vector_sub(com_off_sum, &np_row.vector);
-		}
-
 		st = st->next;
 	}
 
 	entry_j = json_object_new_object();
 	json_object_object_add(entry_j, "type", json_object_new_string("plot"));
-	json_object_object_add(entry_j, "tdata", matrix_to_json(mod_bcoms));
+	json_object_object_add(entry_j, "tdata", matrix_to_json(self->coms));
+	json_object_object_add(entry_j, "label", json_object_new_string("coms"));
+	json_object_object_add(entry_j, "marker", json_object_new_string("o"));
+	json_object_array_put_idx(base_j, i++, entry_j);
+
+	entry_j = json_object_new_object();
+	json_object_object_add(entry_j, "type", json_object_new_string("plot"));
+	json_object_object_add(entry_j, "tdata", matrix_to_json(self->bcoms));
 	json_object_object_add(entry_j, "label", json_object_new_string("bcoms"));
 	json_object_object_add(entry_j, "marker", json_object_new_string("o"));
 	json_object_array_put_idx(base_j, i++, entry_j);
 
 	entry_j = json_object_new_object();
 	json_object_object_add(entry_j, "type", json_object_new_string("plot"));
-	json_object_object_add(entry_j, "tdata", matrix_to_json(mod_coms));
-	json_object_object_add(entry_j, "label", json_object_new_string("coms"));
+	json_object_object_add(entry_j, "tdata", matrix_to_json(self->mod_bcoms));
+	json_object_object_add(entry_j, "label",
+						   json_object_new_string("mod_bcoms"));
 	json_object_object_add(entry_j, "marker", json_object_new_string("o"));
 	json_object_array_put_idx(base_j, i++, entry_j);
-
-	gsl_vector_free(com_off_sum);
-	gsl_matrix_free(mod_bcoms);
-	gsl_matrix_free(mod_coms);
 
 	FILE *fp;
 	const char *plot_str = json_object_to_json_string(base_j);
@@ -761,22 +818,60 @@ static void movement_plot(stance_t *self)
 
 void get_movement(gsl_vector *dir, gsl_vector *pt)
 {
-	size_t n = 4;
-	stance_t *ss;
-	stance_t *s = stance_create_from_model(dir, pt);
+	/*size_t n = 4;*/
+	size_t n_st = 7, ci = 0, bi = 0;
+	movement_t *mv = create_movement(n_st, dir, pt);
+	stance_t *st = mv->st;
+
 	for (size_t i = 0; i < N_LEGS; i++) {
-		s->pidx = i;
+		st->pidx = i;
 		/*stance_plot(s);*/
 	}
 
-	ss = s;
-	optimize(s, n);
-	while (ss->next) {
-		stance_plot(ss->next);
-		ss = ss->next;
+	st = mv->st;
+
+	gsl_vector *com_off_sum = vector_calloc(2);
+
+	gsl_matrix *mod_bcoms = matrix_calloc(mv->n, 2);
+	gsl_matrix *mod_coms = matrix_calloc(mv->n, 2);
+
+	st = mv->st;
+	while (st) {
+		matrix_copy_to_origin(st->mod_pts, st->pts);
+		vector_copy_to_origin(st->mod_bcom, st->bcom);
+		vector_copy_to_origin(st->mod_com, st->com);
+
+		matrix_sub_vec_rows(st->mod_pts, com_off_sum);
+
+		gsl_vector_view vc = gsl_matrix_row(mod_coms, ci++);
+		centroid_of_polygon(&vc.vector, st->mod_pts);
+		gsl_vector_view bvc = gsl_matrix_row(mod_bcoms, bi++);
+		if (st->prev) {
+			calc_bcom(st->mod_pts, st->pidx, &bvc.vector);
+		} else {
+			vector_copy_to_origin(&bvc.vector, &vc.vector);
+		}
+
+		if (st->next) {
+			int not_pidx = !st->next->pidx;
+			gsl_vector_view np_nrow = gsl_matrix_row(st->next->pts, not_pidx);
+			gsl_vector_add(com_off_sum, &np_nrow.vector);
+			gsl_vector_view np_row = gsl_matrix_row(st->pts, not_pidx);
+			gsl_vector_sub(com_off_sum, &np_row.vector);
+		}
+
+		st = st->next;
 	}
 
-	movement_plot(s);
+	gsl_vector_free(com_off_sum);
 
-	stance_free(s, true);
+	mv->mod_bcoms = mod_bcoms;
+	mv->coms = matrix_clone(mod_coms);
+	mv->bcoms = matrix_clone(mod_bcoms);
+
+	movement_optimize(mv);
+
+	movement_plot(mv);
+
+	movement_free(mv);
 }
