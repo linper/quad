@@ -25,6 +25,7 @@
 #include "req.h"
 
 #define N_CONNS 2
+#define N_RSP_TRIES 3
 #define FIFO_PERM (S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH)
 
 #define VC_PATH "/tmp/view_ctl_pipe"
@@ -44,6 +45,25 @@ typedef struct fifo_conn {
 } fifo_conn_t;
 
 static ipc_conn_t *conns[MAX_ADDR_TP];
+static int64_t req_id = 0;
+
+/**********
+*  MISC  *
+**********/
+
+static int64_t get_id(struct json_object *j)
+{
+	struct json_object *tmp;
+
+	if (!json_object_object_get_ex(j, "id", &tmp)) {
+		ERR(ERR_PARSE_FAIL);
+		return -1;
+	}
+
+	int64_t res = json_object_get_int64(tmp);
+
+	return res;
+}
 
 /**********
 *  FIFO  *
@@ -115,11 +135,11 @@ static void fifo_conn_free(struct ipc_conn *self)
 	free(self);
 }
 
-static int fifo_conn_request(struct ipc_conn *self, char *buf, bool no_recv)
+static int fifo_conn_request(struct ipc_conn *self, char *buf, bool no_req,
+							 bool no_recv)
 {
 	int ret;
 
-	DBG("Sent: %s\n", buf);
 	/*HEX(buf, strlen(buf));*/
 	if (!self || !self->priv) {
 		ERR(ERR_INVALID_INPUT);
@@ -128,9 +148,12 @@ static int fifo_conn_request(struct ipc_conn *self, char *buf, bool no_recv)
 
 	fifo_conn_t *c = (fifo_conn_t *)self->priv;
 
-	if (write(c->out_fd, buf, strlen(buf)) == -1) {
-		ERR(NLS, strerror(errno));
-		return 1;
+	if (!no_req) {
+		DBG("Sent: %s\n", buf);
+		if (write(c->out_fd, buf, strlen(buf)) == -1) {
+			ERR(NLS, strerror(errno));
+			return 1;
+		}
 	}
 
 	if (no_recv) {
@@ -181,7 +204,7 @@ static void fifo_conn_process_async(struct ipc_conn *self)
 
 	DBG("Received[%d]:%s\n", ret, rbuf);
 	/*if (strstr(rbuf, "\"go\"")) {*/
-		/*printf("whatever\n");*/
+	/*printf("whatever\n");*/
 	/*}*/
 
 	while ((ptr = strsep(&bptr, "\n"))) {
@@ -307,11 +330,15 @@ int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 	char buf[IPC_BUF_LEN];
 	const char *p;
 	struct json_object *rsp, *tmp;
+	int64_t id;
+	int status = -1;
 
 	if (!*j || addr < 0 || addr > MAX_ADDR_TP) {
 		ERR(ERR_INVALID_INPUT);
 		return -1;
 	}
+
+	json_object_object_add(*j, "id", json_object_new_int64(req_id++));
 
 	p = json_object_to_json_string(*j);
 	strncpy(buf, p, IPC_BUF_LEN);
@@ -322,7 +349,7 @@ int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 		return -1;
 	}
 
-	if (c->req(c, buf, no_recv)) {
+	if (c->req(c, buf, false, no_recv)) {
 		ERR(ERR_PARSE_FAIL);
 		return -1;
 	}
@@ -332,22 +359,33 @@ int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 	}
 
 	json_object_put(*j);
+	for (int i = 0; i < N_RSP_TRIES; i++) {
+		rsp = json_tokener_parse(buf);
+		if (!rsp) {
+			ERR(ERR_PARSE_FAIL);
+			return -1;
+		}
 
-	rsp = json_tokener_parse(buf);
-	if (!rsp) {
-		ERR(ERR_PARSE_FAIL);
-		return -1;
+		*j = rsp;
+
+		id = get_id(rsp);
+		if (id != req_id - 1) {
+			DBG("Invalid response tries:%d\n", i);
+			if (c->req(c, buf, true, no_recv)) {
+				ERR(ERR_PARSE_FAIL);
+				return -1;
+			}
+			continue;
+		}
+
+		// Status
+		if (!json_object_object_get_ex(rsp, "status", &tmp)) {
+			ERR(ERR_PARSE_FAIL);
+			return -1;
+		}
+
+		status = json_object_get_int(tmp);
 	}
-
-	*j = rsp;
-
-	// Status
-	if (!json_object_object_get_ex(rsp, "status", &tmp)) {
-		ERR(ERR_PARSE_FAIL);
-		return 1;
-	}
-
-	int status = json_object_get_int(tmp);
 
 	return status;
 }

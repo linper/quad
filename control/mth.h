@@ -48,6 +48,7 @@ gsl_matrix *matrix_del_row_n(gsl_matrix *m, size_t idx);
 int matrix_add_vec_rows(gsl_matrix *m, gsl_vector *v);
 int matrix_sub_vec_rows(gsl_matrix *m, gsl_vector *v);
 gsl_vector *matrix_sum_axis(gsl_matrix *m, int axis);
+gsl_vector *matrix_mean_axis(gsl_matrix *m, int axis);
 gsl_matrix *matrix_clone(gsl_matrix *m);
 gsl_matrix *matrix_sub_n(gsl_matrix *a, gsl_matrix *b);
 gsl_matrix *matrix_add_n(gsl_matrix *a, gsl_matrix *b);
@@ -114,6 +115,7 @@ bool ellipse_point_inside(double a, double b, double x, double y, double *val);
 bool ellipse_line_intersect(double a, double b, double k, double c, double *x1,
 							double *y1, double *x2, double *y2);
 double area(double *p1, double *p2, double *p3);
+bool is_inside_triangle(gsl_vector *pt, gsl_matrix *trig, double trig_acale, double *cof);
 double bound_data(double dt, double lo, double hi);
 int centroid_of_polygon(gsl_vector *res, gsl_matrix *pts);
 

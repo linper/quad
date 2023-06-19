@@ -35,7 +35,7 @@ typedef struct ipc_conn {
 	enum conn_flags flags;
 	void *priv;
 	void (*free)(struct ipc_conn *);
-	int (*req)(struct ipc_conn *, char *buf, bool no_recv);
+	int (*req)(struct ipc_conn *, char *buf, bool no_req, bool no_recv);
 	void (*async)(struct ipc_conn *);
 	void (*complete)(struct ipc_conn *);
 	void (*suspend)(struct ipc_conn *, struct json_object **);

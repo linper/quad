@@ -336,7 +336,6 @@ gsl_matrix *matrix_del_row_n(gsl_matrix *m, size_t idx)
 
 	gsl_matrix *d = matrix_calloc(m->size1 - 1, m->size2);
 
-
 	for (size_t i = 0, j = 0; i < m->size1; i++) {
 		if (i != idx) {
 			memcpy(d->data + d->tda * j, m->data + d->tda * i,
@@ -358,7 +357,7 @@ int matrix_add_vec_rows(gsl_matrix *m, gsl_vector *v)
 	for (size_t i = 0; i < m->size2; i++) {
 		double val = gsl_vector_get(v, i);
 		for (size_t j = 0; j < m->size1; j++) {
-			*gsl_matrix_ptr(m, j, i) -= val;
+			*gsl_matrix_ptr(m, j, i) += val;
 		}
 	}
 
@@ -408,6 +407,20 @@ gsl_vector *matrix_sum_axis(gsl_matrix *m, int axis)
 			}
 		}
 	}
+
+	return v;
+}
+
+gsl_vector *matrix_mean_axis(gsl_matrix *m, int axis)
+{
+	if (!m || axis < 0 || axis > 1) {
+		return NULL;
+	}
+
+	size_t n = axis ? m->size2 : m->size1;
+
+	gsl_vector *v = matrix_sum_axis(m, axis);
+	gsl_vector_scale(v, 1.0 / n);
 
 	return v;
 }
@@ -1142,6 +1155,41 @@ double area(double *p1, double *p2, double *p3)
 	return fabs((p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) +
 				 p3[0] * (p1[1] - p2[1])) /
 				2.0);
+}
+
+bool is_inside_triangle(gsl_vector *pt, gsl_matrix *trig, double trig_scale,
+						double *cof)
+{
+	double A, A1, A2, A3, c;
+
+	if (pt->size < 2 || trig->size1 < 3 || trig->size2 < 2) {
+		FATAL(ERR_INVALID_INPUT);
+	}
+
+	if (trig_scale != 1.0) {
+		gsl_vector *off = matrix_mean_axis(trig, 0);
+		trig = matrix_clone(trig);
+		matrix_sub_vec_rows(trig, off);
+		gsl_matrix_scale(trig, trig_scale);
+		matrix_add_vec_rows(trig, off);
+		gsl_vector_free(off);
+	}
+
+	A = area(trig->data, trig->data + trig->tda, trig->data + 2 * trig->tda);
+	A1 = area(pt->data, trig->data, trig->data + trig->tda);
+	A2 = area(pt->data, trig->data, trig->data + 2 * trig->tda);
+	A3 = area(pt->data, trig->data + trig->tda, trig->data + 2 * trig->tda);
+
+	if (trig_scale != 1.0) {
+		gsl_matrix_free(trig);
+	}
+
+	c = (A1 + A2 + A3) / A;
+
+	if (cof)
+		*cof = c;
+
+	return !!((c - 1.0) < 0.0001);
 }
 
 double bound_data(double dt, double lo, double hi)
