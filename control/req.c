@@ -132,8 +132,7 @@ static int rsp_vstep(ipc_conn_t *conn, struct json_object *jreq,
 	(void)jreq;
 	(void)conn;
 
-	json_object *j, *d, *l, *lgs;
-	leg_t *leg;
+	json_object *j, *d, *lgs;
 
 	j = json_object_new_object();
 	d = json_object_new_object();
@@ -152,8 +151,8 @@ static int rsp_vstep(ipc_conn_t *conn, struct json_object *jreq,
 
 	lgs = json_object_new_array_ext(N_LEGS);
 	for (int i = 0; i < N_LEGS; i++) {
-		l = json_object_new_object();
-		leg = g_model->legs[i];
+		json_object *l = json_object_new_object();
+		leg_t *leg = g_model->legs[i];
 		json_object_object_add(l, "bal", json_object_new_int(leg->bal));
 		json_object_object_add(l, "idx", json_object_new_int(leg->idx));
 		json_object_object_add(l, "name", json_object_new_string(leg->name));

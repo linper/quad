@@ -10,8 +10,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include "stash.h"
-
 enum gl_fl {
 	GLF_NO_ST = 0,
 	GLF_SELF_ST = 1 << 0,
@@ -24,8 +22,6 @@ enum gl_fl {
  * @brief Implementation of generic list data structure
  */
 typedef struct glist {
-	/**Allocate internal memory in `stash` struct*/
-	stash_t *stash;
 	/**Internal array to store data pointers*/
 	void **array;
 	/**Number of data entries currently stored*/
@@ -92,7 +88,7 @@ int glist_push(glist_t *lst, void *value);
  * @param[in] 		*src 		List pointer to append item to
  * @return Void
  */
-void  glist_extend(glist_t *dst, glist_t *src);
+void glist_extend(glist_t *dst, glist_t *src);
 /**
  * @brief Gets item from list at specific index
  * @param[in] *lst 		List pointer to retrieve item from

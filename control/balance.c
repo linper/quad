@@ -23,7 +23,7 @@
 
 void get_imp_diff(gsl_block *id)
 {
-	double x_min, x_max, x_diff, x_lever, y_min, y_max, y_diff, y_lever, x, y;
+	double x_min, x_max, x_diff, y_min, y_max, y_diff, x, y;
 	sens_t *s = g_model->sens;
 
 	x_min = gsl_vector_get(s->tf_pos, 0);
@@ -52,6 +52,7 @@ void get_imp_diff(gsl_block *id)
 	y_diff = y_max - y_min;
 
 	for (int i = 0; i < N_LEGS; i++) {
+		double x_lever, y_lever;
 		x_lever = fabs(gsl_vector_get(g_model->legs[i]->pos, 0) -
 					   gsl_vector_get(s->tf_pos, 0)) /
 				  x_diff;
@@ -83,7 +84,6 @@ static void get_bal_base(gsl_block *res, double cof)
 	double gh_diff, lh_diff, lh_mod;
 	gsl_matrix *bfo_mat, *height_mat;
 	gsl_vector *leg_pos_mod;
-	leg_t *l;
 	sens_t *s = g_model->sens;
 
 	printf("---------------------------------------------\n");
@@ -101,7 +101,7 @@ static void get_bal_base(gsl_block *res, double cof)
 	gh_diff = g_model->leg_tar_h - s->avg_leg_h;
 
 	for (int i = 0; i < N_LEGS; i++) {
-		l = g_model->legs[i];
+		leg_t *l = g_model->legs[i];
 		if (s->damp->data[i] < g_model->soft_hit_thr) {
 			res->data[i] = cof * (s->avg_leg_h - gsl_vector_get(l->pos, 2));
 			continue;
@@ -125,14 +125,12 @@ static void get_bal_base(gsl_block *res, double cof)
 
 static void get_touch_diff(gsl_block *dd, gsl_block *td)
 {
-	double adj;
-	bool s_hits;
 	sens_t *s = g_model->sens;
 	const double ADJUST_SENS_COF = 0.05;
 
 	for (int i = 0; i < N_LEGS; i++) {
-		s_hits = s->damp->data[i] > g_model->soft_hit_thr;
-		adj = g_model->t_rad * (1 - s->damp->data[i]);
+		bool s_hits = s->damp->data[i] > g_model->soft_hit_thr;
+		double adj = g_model->t_rad * (1 - s->damp->data[i]);
 
 		if (s_hits && ADJUST_SENS_COF < (1 - s->damp->data[i])) {
 			td->data[i] = -adj;

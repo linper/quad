@@ -114,8 +114,9 @@ void line_cof(double x1, double y1, double x2, double y2, double *k, double *b);
 bool ellipse_point_inside(double a, double b, double x, double y, double *val);
 bool ellipse_line_intersect(double a, double b, double k, double c, double *x1,
 							double *y1, double *x2, double *y2);
-double area(double *p1, double *p2, double *p3);
-bool is_inside_triangle(gsl_vector *pt, gsl_matrix *trig, double trig_acale, double *cof);
+double area(const double *p1, const double *p2, const double *p3);
+bool is_inside_triangle(gsl_vector *pt, gsl_matrix *trig, double trig_acale,
+						double *cof);
 double bound_data(double dt, double lo, double hi);
 int centroid_of_polygon(gsl_vector *res, gsl_matrix *pts);
 

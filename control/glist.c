@@ -165,10 +165,9 @@ void *glist_get(glist_t *lst, int index)
 
 int glist_copy_to(glist_t *src, glist_t *dst)
 {
-	int status;
-
 	while (src->count + dst->count >= dst->cap) {
-		if ((status = extend_storage(dst))) {
+		int status = extend_storage(dst);
+		if (status) {
 			return status;
 		}
 	}

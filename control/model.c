@@ -396,7 +396,7 @@ err:
  */
 static void leg_get_angles(leg_t *l)
 {
-	double gama, leg_len, max_leg_len, min_leg_len, e, alpha, theta, phi, beta;
+	double gama, leg_len, max_leg_len, min_leg_len, alpha, theta, phi, beta;
 	gsl_vector *target, *lims, *dir;
 
 	target = vector_sub_n(l->pos, l->base_off);
@@ -428,8 +428,8 @@ static void leg_get_angles(leg_t *l)
 		g_model->link_len * sqrt(5 - 4 * cos(fabs(gsl_vector_get(lims, 4))));
 
 	if (max_leg_len > leg_len && leg_len > min_leg_len) { // middle
-		e = acos(1.25 - ((leg_len * leg_len) /
-						 (4 * g_model->link_len * g_model->link_len)));
+		double e = acos(1.25 - ((leg_len * leg_len) /
+								(4 * g_model->link_len * g_model->link_len)));
 		alpha = gsl_vector_get(dir, 0) * (M_PI - e);
 	} else if (leg_len >= max_leg_len) { // outer
 		alpha = gsl_vector_get(lims, 4);
@@ -459,10 +459,8 @@ static void leg_get_angles(leg_t *l)
 
 static void model_get_angles()
 {
-	leg_t *l;
-
 	for (int i = 0; i < N_LEGS; i++) {
-		l = g_model->legs[i];
+		leg_t *l = g_model->legs[i];
 		leg_get_angles(l);
 		gsl_matrix_set_row(g_model->angles, i, l->angles);
 	}

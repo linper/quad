@@ -13,7 +13,7 @@ LDFLAGS += -lgsl -lgslcblas
 
 RM = rm -f
 
-all: compile 
+all: clean compile check
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
@@ -21,9 +21,12 @@ all: compile
 $(BIN): $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 	
-.PHONY: clean compile
+.PHONY: clean compile check
 
 compile: $(BIN)
 
 clean:
 	$(RM) $(BIN) $(OBJ)
+
+check:
+	cppcheck --enable=all -q --suppress=unusedFunction --suppress=missingIncludeSystem $(SRC)

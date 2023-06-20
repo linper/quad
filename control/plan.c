@@ -24,7 +24,6 @@
 #include <plan.h>
 #include <balance.h>
 #include <glist.h>
-/*#include <stash.h>*/
 #include <model.h>
 
 #define MIN_N_INTERP 5
@@ -52,14 +51,14 @@ static double get_d2_speed(dpt_t *d1, dpt_t *d2)
 }
 */
 
-static int gradual_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, double dist_st,
+static int gradual_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 						 gsl_block **dists_p, gsl_block **vels_ps_p)
 {
 	gsl_block *dists, *vels_ps;
-	double prev_v = 0.0, vel;
+	double prev_v = 0.0;
 	double tm_sum = dist_st;
 
-	if (!p || !d1 || !d2 || !dists_p || !vels_ps_p) {
+	if (!d1 || !d2 || !dists_p || !vels_ps_p) {
 		return 1;
 	}
 
@@ -67,7 +66,7 @@ static int gradual_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, double dist_st,
 	dists = block_calloc(d2->ts - d1->ts + 1);
 
 	for (size_t i = 0; i < vels_ps->size; i++) {
-		vel = vels_ps->data[i];
+		double vel = vels_ps->data[i];
 		tm_sum += (vel + prev_v) / 2;
 		prev_v = vel;
 		/*prev_v = vel + prev_v;*/
@@ -80,19 +79,19 @@ static int gradual_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, double dist_st,
 	return 0;
 }
 
-static int variable_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, double dist_st,
+static int variable_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 						  gsl_block **dists_p, gsl_block **vels_ps_p)
 {
 	/*gsl_vector *tmp_m;*/
 	gsl_block *dists, *vels_ps;
-	double S_dif, sp_top, inc, sum = 0.0, tm_sum = 0.0, prev_v = 0.0, vel;
+	double S_dif, sp_top, inc, sum = 0.0, tm_sum = 0.0, prev_v = 0.0;
 	int t_dt;
 
-	if (!p || !d1 || !d2 || !dists_p || !vels_ps_p) {
+	if (!d1 || !d2 || !dists_p || !vels_ps_p) {
 		return 1;
 	}
 
-	gradual_vfunc(p, d1, d2, dist_st, &dists, &vels_ps);
+	gradual_vfunc(d1, d2, dist_st, &dists, &vels_ps);
 	/*tmp_m = vector_sub_n(d2->pos, d1->pos);*/
 
 	/*S_dif = vector_length(tmp_m);*/
@@ -114,7 +113,7 @@ static int variable_vfunc(plan_t *p, dpt_t *d1, dpt_t *d2, double dist_st,
 	}
 
 	for (size_t i = 0; i < vels_ps->size; i++) {
-		vel = vels_ps->data[i];
+		double vel = vels_ps->data[i];
 		tm_sum += (vel + prev_v) / 2;
 		prev_v = vel;
 		dists->data[i] += tm_sum;
@@ -202,7 +201,6 @@ static void plan_make_steps(plan_t *self)
 	double *pts_data, *tpts, *vps, *data_x, *data_y, *data_z, off;
 	double epsilon = 0.0001; //small constant for float rounding
 	size_t n, num_steps, cur_num_steps = 0;
-	dpt_t *e, *e_next;
 	gsl_block *vels, *dists;
 
 	n = self->pts->count;
@@ -218,7 +216,7 @@ static void plan_make_steps(plan_t *self)
 	data_z = pts_data + 4 * n;
 
 	for (size_t i = 0; i < n; i++) {
-		e = (dpt_t *)glist_get(self->pts, i);
+		dpt_t *e = (dpt_t *)glist_get(self->pts, i);
 		tpts[i] = e->ts;
 		vps[i] = e->vps;
 		data_x[i] = *e->x;
@@ -235,10 +233,10 @@ static void plan_make_steps(plan_t *self)
 	tpts[n - 1] += epsilon;
 
 	for (size_t i = 0; i < n - 1; i++) {
-		e = (dpt_t *)self->pts->array[i];
-		e_next = (dpt_t *)self->pts->array[i + 1];
+		dpt_t *e = (dpt_t *)self->pts->array[i];
+		dpt_t *e_next = (dpt_t *)self->pts->array[i + 1];
 
-		variable_vfunc(self, e, e_next, off, &dists, &vels);
+		variable_vfunc(e, e_next, off, &dists, &vels);
 		off = dists->data[dists->size - 1];
 		if (i) {
 			memcpy(self->dists->data + cur_num_steps, dists->data + 1,
@@ -334,17 +332,16 @@ static int act_ascending(fsm_t *fsm)
 
 	leg_t *l = (leg_t *)fsm->priv;
 	plan_t *p = &l->plan;
-	dpt_t *pre, *post;
-
-	double dx, dy, step_dist, end_ts, *walk_h;
-	dpt_t *start, *end, *mid;
 
 	if (p->need_plan) {
+		dpt_t *start, *end, *mid;
+		double dx, dy, step_dist, end_ts, *walk_h;
+
 		DBG("%s: Ascending\n", l->name);
 		l->bal = false;
 		walk_h = g_model->sens->walk_h;
 
-		pre = dpt_clone(dpt_hist_get(p, -1));
+		dpt_t *pre = dpt_clone(dpt_hist_get(p, -1));
 		pre->vps = 1.0;
 
 		start = dpt_clone(dpt_hist_get(p, 0));
@@ -366,7 +363,7 @@ static int act_ascending(fsm_t *fsm)
 
 		end = dpt_new(end_pos, end_ts, 1.0);
 
-		post = dpt_clone(end);
+		dpt_t *post = dpt_clone(end);
 		post->ts += 1.0;
 
 		double mid_pos[3] = {
@@ -419,10 +416,9 @@ static int act_descending(fsm_t *fsm)
 
 	leg_t *l = (leg_t *)fsm->priv;
 	plan_t *p = &l->plan;
-	double mid_ts;
-	dpt_t *start, *end, *mid, *pre, *post;
 
 	if (p->need_plan) {
+		dpt_t *start, *end, *mid, *pre, *post;
 		DBG("%s: Descending\n", l->name);
 		l->bal = false;
 
@@ -434,7 +430,7 @@ static int act_descending(fsm_t *fsm)
 		post = dpt_clone(end);
 		post->ts += 1.0;
 
-		mid_ts = roundf(start->ts + TM_C * (p->target->ts - start->ts));
+		double mid_ts = roundf(start->ts + TM_C * (p->target->ts - start->ts));
 
 		double mid_pos[3] = { *start->x + OF_C * (*p->target->x - *start->x),
 							  *start->y + OF_C * (*p->target->y - *start->y),
@@ -474,7 +470,6 @@ static int act_traversing(fsm_t *fsm)
 {
 	leg_t *l = (leg_t *)fsm->priv;
 	plan_t *p = &l->plan;
-	dpt_t *d, *dc;
 
 	if (p->need_plan) {
 		DBG("%s: Traversing\n", l->name);
@@ -482,13 +477,13 @@ static int act_traversing(fsm_t *fsm)
 
 		for (int i = MIN(-MIN_N_INTERP + p->raw_pts->count + 1, -1); i <= 0;
 			 i++) {
-			d = dpt_hist_get(p, i);
-			dc = dpt_clone(d);
+			dpt_t *d = dpt_hist_get(p, i);
+			dpt_t *dc = dpt_clone(d);
 			glist_push(p->pts, dc);
 		}
 
 		for (size_t i = 0; i < p->raw_pts->count; i++) {
-			dc = dpt_clone((dpt_t *)p->raw_pts->array[i]);
+			dpt_t *dc = dpt_clone((dpt_t *)p->raw_pts->array[i]);
 			glist_push(p->pts, dc);
 		}
 
@@ -786,7 +781,6 @@ void plan_make_movement(plan_t *self, double *pts, size_t n_pts, bool do_lift)
 			tsum += 50;
 			p = dpt_new(pts, tsum, 1.0);
 			glist_push(lst, p);
-			pp = p;
 			pts += 3;
 		}
 		plan_make(self, LFSMS_TRV, lst);

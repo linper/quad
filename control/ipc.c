@@ -88,9 +88,6 @@ static void fifo_conn_complete(struct ipc_conn *self)
 
 static void fifo_conn_suspend(struct ipc_conn *self, struct json_object **msg)
 {
-	char buf[IPC_BUF_LEN];
-	const char *p;
-
 	if (!self) {
 		return;
 	}
@@ -98,7 +95,8 @@ static void fifo_conn_suspend(struct ipc_conn *self, struct json_object **msg)
 	fifo_conn_t *c = (fifo_conn_t *)self->priv;
 
 	if (*msg) {
-		p = json_object_to_json_string(*msg);
+		char buf[IPC_BUF_LEN];
+		const char *p = json_object_to_json_string(*msg);
 		strncpy(buf, p, IPC_BUF_LEN);
 		json_object_put(*msg);
 		*msg = NULL;
@@ -108,7 +106,7 @@ static void fifo_conn_suspend(struct ipc_conn *self, struct json_object **msg)
 			return;
 		}
 
-		DBG("Sent[%lu]:%s\n", strlen(buf), buf);
+		DBG("Sent[%zu]:%s\n", strlen(buf), buf);
 	}
 
 	if (c && c->out_fd && self->flags & CONN_FL_LAZY_CONNECT) {
@@ -239,7 +237,7 @@ static void fifo_conn_process_async(struct ipc_conn *self)
 			return;
 		}
 
-		DBG("Sent[%lu]:%s\n", strlen(wbuf), wbuf);
+		DBG("Sent[%zu]:%s\n", strlen(wbuf), wbuf);
 	}
 	return;
 }
@@ -330,10 +328,9 @@ int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 	char buf[IPC_BUF_LEN];
 	const char *p;
 	struct json_object *rsp, *tmp;
-	int64_t id;
 	int status = -1;
 
-	if (!*j || addr < 0 || addr > MAX_ADDR_TP) {
+	if (!*j || addr < 0 || addr >= MAX_ADDR_TP) {
 		ERR(ERR_INVALID_INPUT);
 		return -1;
 	}
@@ -368,7 +365,7 @@ int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 
 		*j = rsp;
 
-		id = get_id(rsp);
+		int64_t id = get_id(rsp);
 		if (id != req_id - 1) {
 			DBG("Invalid response tries:%d\n", i);
 			if (c->req(c, buf, true, no_recv)) {
@@ -392,10 +389,8 @@ int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 
 void process_async()
 {
-	struct ipc_conn *c;
-
 	for (int i = 0; i < MAX_ADDR_TP; i++) {
-		c = conns[i];
+		struct ipc_conn *c = conns[i];
 		if (!c) {
 			ERR("Connection is not setup\n");
 			continue;
@@ -437,10 +432,8 @@ err:
 
 void ipc_release()
 {
-	struct ipc_conn *c;
-
 	for (int i = 0; i < N_CONNS; i++) {
-		c = conns[i];
+		struct ipc_conn *c = conns[i];
 		if (!c) {
 			ERR("Connection is not setup\n");
 			continue;

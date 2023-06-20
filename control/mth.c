@@ -454,7 +454,7 @@ gsl_matrix *matrix_dot(gsl_matrix *a, gsl_matrix *b)
 
 gsl_vector *matrix_vector_dot(gsl_matrix *a, gsl_vector *b)
 {
-	double ai, bi, temp;
+	double ai, bi;
 	gsl_vector *m;
 
 	if (!a || !b || a->size2 != b->size) {
@@ -465,7 +465,7 @@ gsl_vector *matrix_vector_dot(gsl_matrix *a, gsl_vector *b)
 	m = vector_calloc(b->size);
 
 	for (size_t i = 0; i < b->size; i++) {
-		temp = 0.0;
+		double temp = 0.0;
 		for (size_t j = 0; j < a->size2; j++) {
 			bi = gsl_vector_get(b, j);
 			ai = gsl_matrix_get(a, i, j);
@@ -479,7 +479,7 @@ gsl_vector *matrix_vector_dot(gsl_matrix *a, gsl_vector *b)
 
 struct json_object *matrix_to_json(gsl_matrix *m)
 {
-	struct json_object *l1, *l2;
+	struct json_object *l1;
 
 	if (!m) {
 		ERR(ERR_INVALID_INPUT);
@@ -488,7 +488,7 @@ struct json_object *matrix_to_json(gsl_matrix *m)
 
 	l1 = json_object_new_array_ext(m->size1);
 	for (size_t i = 0; i < m->size1; i++) {
-		l2 = json_object_new_array_ext(m->size2);
+		struct json_object *l2 = json_object_new_array_ext(m->size2);
 		for (size_t j = 0; j < m->size2; j++) {
 			json_object_array_put_idx(
 				l2, j, json_object_new_double(gsl_matrix_get(m, i, j)));
@@ -583,14 +583,14 @@ gsl_vector *vector_linspace(double start, double end, size_t n)
 
 double vector_dist(gsl_vector *from, gsl_vector *to)
 {
-	double sum = 0.0, e;
+	double sum = 0.0;
 
 	if (!from || !to) {
 		return 0.0;
 	}
 
 	for (size_t i = 0; i < from->size; i++) {
-		e = gsl_vector_get(from, i) - gsl_vector_get(to, i);
+		double e = gsl_vector_get(from, i) - gsl_vector_get(to, i);
 		sum += e * e;
 	}
 
@@ -601,14 +601,14 @@ double vector_dist(gsl_vector *from, gsl_vector *to)
 
 double vector_length(gsl_vector *v)
 {
-	double sum = 0.0, e;
+	double sum = 0.0;
 
 	if (!v) {
 		return 0.0;
 	}
 
 	for (size_t i = 0; i < v->size; i++) {
-		e = gsl_vector_get(v, i);
+		double e = gsl_vector_get(v, i);
 		sum += e * e;
 	}
 
@@ -657,7 +657,7 @@ double vector_mean_range(gsl_vector *v, size_t off, size_t n)
 
 double vector_std_range(gsl_vector *v, size_t off, size_t n)
 {
-	double sum, std, mean, val;
+	double sum, std, mean;
 
 	if (!v) {
 		return NAN;
@@ -667,7 +667,7 @@ double vector_std_range(gsl_vector *v, size_t off, size_t n)
 
 	sum = 0.0;
 	for (size_t i = off; i < off + n; i++) {
-		val = mean - v->data[v->stride * i];
+		double val = mean - v->data[v->stride * i];
 		val *= val;
 		sum += val;
 	}
@@ -1150,7 +1150,7 @@ void line_cof(double x1, double y1, double x2, double y2, double *k, double *b)
 	*b = b_val;
 }
 
-double area(double *p1, double *p2, double *p3)
+double area(const double *p1, const double *p2, const double *p3)
 {
 	return fabs((p1[0] * (p2[1] - p3[1]) + p2[0] * (p3[1] - p1[1]) +
 				 p3[0] * (p1[1] - p2[1])) /
