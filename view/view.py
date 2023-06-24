@@ -2,16 +2,10 @@ import math
 import tkinter as tk
 import numpy as np
 import os
-# from leg import Leg
-# from quad import Quad
-# from consts import *
-# from fsm import FSM
-# from interp import *
 import json
 import functools
 from enum import IntEnum
 import time
-# from misc import ActCmd
 
 VC_PATH = "/tmp/view_ctl_pipe"
 CV_PATH = "/tmp/ctl_view_pipe"
@@ -31,26 +25,19 @@ tf_col_tbl = {
 
 class VSens():
     def __init__(self, touch_force, damp, tf_pos, tf_type):
-        # print(f"SENS:{touch_force}:{damp}:{tf_pos}:{tf_type}")
-        # self.avg_leg_h: float = si.avg_leg_h
-        # self.abs_std_leg_h: float = si.abs_std_leg_h
         self.touch_force: np.ndarray = np.array(touch_force)
         self.damp: np.ndarray = np.array(damp)
         self.tf_pos: np.ndarray = np.array(tf_pos)
         self.tf_col: str = tf_col_tbl.get(tf_type)
-        # self.s_center = si.s_center.copy()
-        # self.to_s_closest = si.to_s_closest.copy()
 
 
 class VLeg():
     def __init__(self, bal, idx, name, pos, def_pos):
-        # print(f"LEG:{name}:{idx}:{pos}:{def_pos}")
         self.do_balance: bool = bool(bal)
         self.name: str = name
         self.idx: int = idx
         self.position: np.ndarray = np.array(pos)
         self.def_pos: np.ndarray = np.array(def_pos)
-        # self.grounded = l.grounded
 
 
 class VQuad():
@@ -79,29 +66,37 @@ def intersect(k1, b1, k2, b2):
 
 
 class GoPoint:
-    def __init__(self, pos: np.ndarray):
+    def __init__(self, pos: np.ndarray, up: bool):
+        self.up: bool = up
         self.pos: np.ndarray = pos
 
     def clone(self):
-        return GoPoint(self.pos.copy())
+        return GoPoint(self.pos.copy(), self.up)
+
+    def toggle_up(self):
+        self.up = not self.up
+
+    def to_json(self):
+        return {"up": self.up,
+                "x": self.pos[0],
+                "y": self.pos[1],
+                "z": self.pos[2]}
 
 
 class GoTask:
-    def __init__(self, idx: int, do_lift: bool = False):
+    def __init__(self, idx: int):
         self.points: list = []
         self.direction: np.ndarray = np.array([-0.1, 0.0])
         self.idx: int = idx
-        self.do_lift: bool = do_lift
         self.active: bool = False
         self.exp_set: bool = False  # i.e. explicitly set
         self.dummy: bool = False
 
     def to_json(self):
         return {"idx": self.idx,
-                "do_lift": self.do_lift,
                 "direction": self.direction.tolist(),
                 "n_points": len(self.points),
-                "points": [p.pos.tolist() for p in self.points]}
+                "points": [p.to_json() for p in self.points]}
 
     def add_pt(self, pt: GoPoint):
         self.points.append(pt)
@@ -109,12 +104,8 @@ class GoTask:
     def del_pt(self, idx: int):
         self.points.pop(idx)
 
-    def toggle_lift(self):
-        self.do_lift = not self.do_lift
-
     def clear(self):
         self.points.clear()
-        self.do_lift = False
         self.active = False
         self.dummy = False
         self.exp_set = False
@@ -147,19 +138,17 @@ class GrView:
         self.width = 600
         self.cntr = np.array([self.height / 2, self.width / 2, 0])
         self.root.title = "View"
-        # self.path_sent=False
         self.q = None
         self.sel_mode = tk.IntVar()
         self.test_mode = tk.IntVar()
 
         self.space = tk.Canvas(self.root, background="white",
-                             height=self.height, width=self.width)
+                               height=self.height, width=self.width)
         self.space.bind("<Button-1>", self.on_btn_clk)
         self.space.bind("<Double-Button-1>", self.on_btn_dbl_clk)
         self.space.grid(row=0, column=0)
-        # self.saved: list = []
         self.tasks: list = [GoTask(-1), GoTask(0),
-                          GoTask(1), GoTask(2), GoTask(3)]
+                            GoTask(1), GoTask(2), GoTask(3)]
         self.task_cmd = GoCmd(self.tasks)
         b = tk.Button(self.root, text="Go", command=self.send_go_cmd)
         b.place(x=0, y=self.height - 20)
@@ -186,7 +175,7 @@ class GrView:
         R4.place(x=100, y=self.height + 5)
         self.test_mode.set(0)
         self.running: bool = False
-        self.wdt_last = round(time.time() * 1000) 
+        self.wdt_last = round(time.time() * 1000)
 
         try:
             os.mkfifo(VC_PATH)
@@ -202,7 +191,7 @@ class GrView:
 
         self.root.tk.createfilehandler(
             self.cv_fd, tk.READABLE, self.on_got_msg)
-        
+
     def call_control(self, msg):
         try:
             os.write(self.vc_fd, bytes(msg, "utf-8"))
@@ -210,7 +199,7 @@ class GrView:
             print("\"control\" was inactive")
 
     def wdt_check(self):
-        wdt_cur = round(time.time() * 1000) 
+        wdt_cur = round(time.time() * 1000)
         if self.wdt_last + WDT_TIMEOUT < wdt_cur:
             print("WDT HIT")
             self.call_control(json.dumps({"act": "hello", "data": "empty"}))
@@ -227,14 +216,12 @@ class GrView:
         if len(pos_lst) == 0:
             return
 
-        pos = np.average(np.array(pos_lst), axis = 0)
+        pos = np.average(np.array(pos_lst), axis=0)
 
         pt = self.mul * pos + self.cntr
 
         self.space.create_oval(pt[1] - r, pt[0] - r,
-                               pt[1] + r, pt[0] + r, fill= "black")
-        # self.space.create_oval(pt[0] - r, pt[1] - r,
-                              # pt[0] + r, pt[1] + r, fill="black")
+                               pt[1] + r, pt[0] + r, fill="black")
 
     def draw_leg_circle(self, leg):
         force = self.q.sens_info.touch_force[leg.idx]
@@ -248,15 +235,13 @@ class GrView:
             color = "red"
 
         r = 6
-        pt =self.mul * leg.position + \
+        pt = self.mul * leg.position + \
             self.cntr
         self.space.create_oval(pt[1] - r, pt[0] - r,
-                               pt[1] + r, pt[0] + r, fill= color)
+                               pt[1] + r, pt[0] + r, fill=color)
         leg_name_abr = "".join([c[0] for c in leg.name.split("_")])
         self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
-                               anchor= tk.W, text =f"{leg_name_abr}:{round(leg.position[2], 3)}")
-        # self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
-                              # anchor = tk.W, text =f"{leg_name_abr}:{FSM.state_str(leg.fsm)}:{round(leg.plan.adj[2], 3)}:{round(leg.position[2], 3)}")
+                               anchor=tk.W, text=f"{leg_name_abr}:{round(leg.position[2], 3)}")
 
     def draw_circle(self, pos, color):
         r = 6
@@ -276,8 +261,6 @@ class GrView:
             lpt[1], lpt[0], reduced[1], reduced[0], width=4, fill="black")
         self.space.pack()
         self.draw_circle(reduced, q.sens_info.tf_col)
-        # self.space.create_text(reduced[1] - 16, reduced[0] - 26,
-               # anchor=tk.W, text=f"{round(q.sens_info.avg_leg_h, 3)}:{round(q.sens_info.abs_std_leg_h, 3)}")
 
     def draw_leg_adjust(self, leg):
         cpt = self.cntr
@@ -299,8 +282,6 @@ class GrView:
             ix, iy, reduced[1], reduced[0], width=4, fill="red")
         self.space.create_line(
             lpt[1], lpt[0], cpt[1], cpt[0], width=4, fill="black")
-        # self.space.create_line(0, rb, self.width, rk *
-                              # self.width+rb, width=4, fill="orange")
         self.space.create_line(
             ix, iy, cpt[1], cpt[0], width=4, fill=color)
         self.space.pack()
@@ -360,20 +341,20 @@ class GrView:
                 l_pos = self.q.legs[t.idx].position
                 base_pos = np.array([0.0, 0.0, 0.0])
 
-            color = "red" if t.do_lift else "blue"
-
             last_pt = self.mul * (l_pos + base_pos) * \
                 np.array([1, 1, 1]) + \
                 self.cntr
 
             if t.active:
                 self.space.create_oval(last_pt[1] - r, last_pt[0] - r,
-                                       last_pt[1] + r, last_pt[0] + r, width=3, outline=color)
+                                       last_pt[1] + r, last_pt[0] + r, width=3, outline="black")
 
             for p in t.points:
                 pt = self.mul * (p.pos + base_pos) * \
                     np.array([1, 1, 1]) + \
                     self.cntr
+
+                color = "red" if p.up else "blue"
 
                 self.space.create_line(
                     last_pt[1], last_pt[0], pt[1], pt[0], width=3, fill=color)
@@ -385,18 +366,12 @@ class GrView:
 
     def send_go_cmd(self):
         self.wdt_check()
-        # while self.q_to.full():
-           # print("GV queue is full, sleeping...")
-           # time.sleep(0.05)
 
         print("Go")
         self.__clear_dummies()
 
-        json_str = json.dumps({"act": "go", "data":self.task_cmd.to_json()})
+        json_str = json.dumps({"act": "go", "data": self.task_cmd.to_json()})
         print(f"request:{json_str}")
-        # saved_adj = [(np.array([s.y, s.x, -0.0 * self.mul]) - np.array(
-        # [self.height / 2, self.width / 2, 0])) / self.mul for s in self.saved]
-        # self.q_to.put(self.task_cmd)
         self.call_control(json_str + "\n")
         for t in self.tasks:
             t.active = False
@@ -404,23 +379,14 @@ class GrView:
 
     def send_clear_cmd(self):
         self.wdt_check()
-        # while self.q_cmd.full():
-        # print("GV cmd queue is full, sleeping...")
-        # time.sleep(0.05)
 
         print("clear")
         self.__clear_dummies()
 
         for t in self.tasks:
             t.clear()
-            # if t.idx == -1:
-               # t.add_pt(GoPoint(np.zeros(3, dtype=float)))
-            # else:
-               # t.add_pt(GoPoint(self.q.legs[t.idx].def_pos))
             if t.idx != -1:
-                t.add_pt(GoPoint(self.q.legs[t.idx].def_pos))
-
-        # self.q_cmd.put(ActCmd.CLEAR)
+                t.add_pt(GoPoint(self.q.legs[t.idx].def_pos, False))
 
         self.send_go_cmd()
 
@@ -469,6 +435,7 @@ class GrView:
                 s = self.mul * p.pos + self.cntr
 
                 if abs(s[1] - ev.x) <= err and abs(s[0] - ev.y) <= err:
+                    p.toggle_up()
                     return
 
         for t in self.tasks:
@@ -479,13 +446,12 @@ class GrView:
                 if t.idx != -1:
                     pos[2] = self.q.legs[t.idx].def_pos[2]
 
-                t.add_pt(GoPoint(pos))
+                t.add_pt(GoPoint(pos, False))
                 t.exp_set = True
 
     def on_btn_dbl_clk(self, ev):
         self.wdt_check()
         self.__clear_dummies()
-        # print("dbl clicked")
         err = 10
 
         for t in self.tasks:
@@ -504,8 +470,6 @@ class GrView:
                     for ts in self.tasks:
                         if ts.idx != t.idx:
                             ts.active = False
-                else:
-                    t.toggle_lift()
 
             for j, p in enumerate(t.points):
                 s = self.mul * p.pos + self.cntr
@@ -542,12 +506,11 @@ class GrView:
                          l["def_pos"]) for l in raw_legs]
             self.q = VQuad(legs, sens)
             self.update()
-            self.call_control(json.dumps({"act": "vstep", "data": "empty"}) + "\n")
+            self.call_control(json.dumps(
+                {"act": "vstep", "data": "empty"}) + "\n")
         elif act == "hello":
-            self.call_control(json.dumps({"act": "vstep", "data": "empty"}) + "\n")
-
-        # except Exception as e:
-            # print(f"Failed to parse: {e}")
+            self.call_control(json.dumps(
+                {"act": "vstep", "data": "empty"}) + "\n")
 
     def update(self):
         self.root.update()
@@ -563,7 +526,6 @@ class GrView:
             self.draw_leg_circle(l)
             self.draw_leg_adjust(l)
 
-        # self.draw_s_sines()
         self.draw_force()
 
     def setup(self):

@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <gsl/gsl_vector_double.h>
+#include <gsl/gsl_matrix_double.h>
 
-//#include "glist.h"
-
-void get_movement(gsl_vector *dir, gsl_vector *pt);
+void get_movement(gsl_vector *dir, gsl_matrix *pts);

@@ -86,8 +86,6 @@ static void get_bal_base(gsl_block *res, double cof)
 	gsl_vector *leg_pos_mod;
 	sens_t *s = g_model->sens;
 
-	printf("---------------------------------------------\n");
-
 	bfo_mat = matrix_calloc(4, 4);
 	gsl_matrix_set_identity(bfo_mat);
 	matrix_copy_to_origin(bfo_mat, s->bfo_mat);
@@ -110,8 +108,9 @@ static void get_bal_base(gsl_block *res, double cof)
 		vector_copy_to_origin(leg_pos_mod, l->pos);
 		gsl_vector_set(leg_pos_mod, 3, 1.0);
 
-		leg_pos_mod = matrix_vector_dot(bfo_mat, leg_pos_mod);
-		lh_mod = gsl_vector_get(leg_pos_mod, 2);
+		gsl_vector *lpm_tmp = matrix_vector_dot(bfo_mat, leg_pos_mod);
+		lh_mod = gsl_vector_get(lpm_tmp, 2);
+		gsl_vector_free(lpm_tmp);
 		lh_mod += gh_diff;
 		lh_diff = (lh_mod - gsl_vector_get(l->pos, 2)) * cof;
 
@@ -161,31 +160,11 @@ int calc_balance()
 
 	memset(s->balance->data, 0, s->balance->size * sizeof(double));
 
-	printf("damp: ");
-	block_print(s->damp);
-	printf("touch f: ");
-	block_print(s->touch_f);
-	printf("base: ");
-	block_print(base_part);
-	printf("drop: ");
-	block_print(drop_diff);
-	printf("touch_diff: ");
-	block_print(touch_diff);
-	printf("shock_diff: ");
-	block_print(shock_diff);
-	printf("imp_diff: ");
-	block_print(imp_diff);
-
-	/*printf("balance0: ");*/
-	/*block_print(s->balance);*/
 	for (int i = 0; i < N_LEGS; i++) {
 		s->balance->data[i] =
 			pidc_eval(&g_model->legs[i]->balance_pid, 0.0,
 					  base_part->data[i] + shock_diff->data[i]);
 	}
-
-	printf("balance1: ");
-	block_print(s->balance);
 
 	for (int i = 0; i < N_LEGS; i++) {
 		double *cur = s->balance->data + i;
@@ -197,9 +176,6 @@ int calc_balance()
 								  drop_diff->data[i]);
 		}
 	}
-
-	printf("final: ");
-	block_print(s->balance);
 
 	gsl_block_free(base_part);
 	gsl_block_free(drop_diff);

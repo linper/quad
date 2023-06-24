@@ -5,15 +5,13 @@
  * @date 2023-02-13
  */
 
+#include <gsl/gsl_block_double.h>
 #include <gsl/gsl_vector_double.h>
 #include <mth.h>
 #include <stance.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-/*#include <errno.h>*/
-/*#include <unistd.h>*/
-/*#include <fcntl.h>*/
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -177,8 +175,9 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 	(void)conn;
 
 	int n_tasks, n_points, lidx;
-	double *pos_arr, dir_arr[2];
-	bool do_lift;
+	double dir_arr[2];
+	gsl_matrix *pos;
+	gsl_block *ups;
 
 	json_object *jtasks, *jtask, *jpts, *jpt, *tmp1, *jdir;
 
@@ -194,18 +193,10 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 		if (!(jtask = json_object_array_get_idx(jtasks, i)))
 			goto err;
 
-		if (!json_object_object_get_ex(jtask, "do_lift", &tmp1))
-			goto err;
-
-		do_lift = json_object_get_boolean(tmp1);
-
 		if (!json_object_object_get_ex(jtask, "idx", &tmp1))
 			goto err;
 
 		lidx = json_object_get_int(tmp1);
-
-		/*if (lidx < 0)*/
-		/*continue;*/
 
 		if (!json_object_object_get_ex(jtask, "direction", &jdir))
 			goto err;
@@ -223,10 +214,8 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 
 		n_points = json_object_get_int(tmp1);
 
-		pos_arr = malloc(3 * n_points * sizeof(double));
-		if (!pos_arr) {
-			FATAL(ERR_MALLOC_FAIL);
-		}
+		pos = matrix_calloc(n_points, 3);
+		ups = block_calloc(n_points);
 
 		if (!json_object_object_get_ex(jtask, "points", &jpts))
 			goto err;
@@ -235,26 +224,38 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 			if (!(jpt = json_object_array_get_idx(jpts, j)))
 				goto err;
 
-			pos_arr[3 * j + 0] =
-				json_object_get_double(json_object_array_get_idx(jpt, 0));
-			pos_arr[3 * j + 1] =
-				json_object_get_double(json_object_array_get_idx(jpt, 1));
-			pos_arr[3 * j + 2] =
-				json_object_get_double(json_object_array_get_idx(jpt, 2));
+			if (!json_object_object_get_ex(jpt, "up", &tmp1))
+				goto err;
+
+			ups->data[j] = json_object_get_boolean(tmp1);
+
+			if (!json_object_object_get_ex(jpt, "x", &tmp1))
+				goto err;
+
+			pos->data[pos->tda * j] = json_object_get_double(tmp1);
+
+			if (!json_object_object_get_ex(jpt, "y", &tmp1))
+				goto err;
+
+			pos->data[pos->tda * j + 1] = json_object_get_double(tmp1);
+
+			if (!json_object_object_get_ex(jpt, "z", &tmp1))
+				goto err;
+
+			pos->data[pos->tda * j + 2] = json_object_get_double(tmp1);
 		}
 
 		gsl_vector *dir = vector_from_array(2, dir_arr);
 
 		if (lidx != -1) {
-			plan_make_movement(&g_model->legs[lidx]->plan, pos_arr, n_points,
-							   do_lift);
+			plan_make_movement(&g_model->legs[lidx]->plan, pos, ups);
 		} else {
-			gsl_vector *pt = vector_from_array(2, pos_arr);
-			get_movement(dir, pt);
-			gsl_vector_free(pt);
+			get_movement(dir, pos);
 		}
 
-		free(pos_arr);
+		gsl_matrix_free(pos);
+		gsl_vector_free(dir);
+		gsl_block_free(ups);
 	}
 
 	return 0;

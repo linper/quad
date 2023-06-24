@@ -363,25 +363,30 @@ int ipc_conn_request_ex(enum conn_addr addr, struct json_object **j,
 			return -1;
 		}
 
-		*j = rsp;
-
 		int64_t id = get_id(rsp);
 		if (id != req_id - 1) {
 			DBG("Invalid response tries:%d\n", i);
 			if (c->req(c, buf, true, no_recv)) {
 				ERR(ERR_PARSE_FAIL);
+				json_object_put(rsp);
 				return -1;
 			}
+
+			json_object_put(rsp);
 			continue;
 		}
 
 		// Status
 		if (!json_object_object_get_ex(rsp, "status", &tmp)) {
 			ERR(ERR_PARSE_FAIL);
+			json_object_put(rsp);
 			return -1;
 		}
 
 		status = json_object_get_int(tmp);
+
+		*j = rsp;
+		break;
 	}
 
 	return status;

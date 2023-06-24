@@ -51,8 +51,6 @@ void fsm_next(fsm_t *self, uint32_t act)
 	if (self->cur >= self->n_state) {
 		self->cur = 0;
 	}
-	/*self.leg.plan.compensate_pos()*/
-	fsm_execute(self);
 }
 
 void fsm_set(fsm_t *self, uint32_t state)
@@ -62,7 +60,6 @@ void fsm_set(fsm_t *self, uint32_t state)
 	}
 
 	self->cur = state;
-	/*self.leg.plan.compensate_pos()*/
 }
 
 void fsm_reset(fsm_t *self)
@@ -79,8 +76,6 @@ int fsm_execute(fsm_t *self)
 	if (!self) {
 		return 1;
 	}
-
-	/*self->cur = 0;*/
 
 	int res = self->f_map[self->cur](self);
 

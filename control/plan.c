@@ -37,20 +37,6 @@ enum lfsm_act {
 	LFSMA_MAX,
 };
 
-/*
-static double get_d2_speed(dpt_t *d1, dpt_t *d2)
-{
-	double vel, S;
-	gsl_vector *d;
-
-	d = vector_sub_n(d2->pos, d1->pos);
-	S = vector_length(d);
-	vel = S / (d2->ts - d1->ts);
-
-	return vel;
-}
-*/
-
 static int gradual_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 						 gsl_block **dists_p, gsl_block **vels_ps_p)
 {
@@ -69,7 +55,6 @@ static int gradual_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 		double vel = vels_ps->data[i];
 		tm_sum += (vel + prev_v) / 2;
 		prev_v = vel;
-		/*prev_v = vel + prev_v;*/
 		dists->data[i] = tm_sum;
 	}
 
@@ -82,7 +67,6 @@ static int gradual_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 static int variable_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 						  gsl_block **dists_p, gsl_block **vels_ps_p)
 {
-	/*gsl_vector *tmp_m;*/
 	gsl_block *dists, *vels_ps;
 	double S_dif, sp_top, inc, sum = 0.0, tm_sum = 0.0, prev_v = 0.0;
 	int t_dt;
@@ -92,11 +76,8 @@ static int variable_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 	}
 
 	gradual_vfunc(d1, d2, dist_st, &dists, &vels_ps);
-	/*tmp_m = vector_sub_n(d2->pos, d1->pos);*/
 
-	/*S_dif = vector_length(tmp_m);*/
 	S_dif = (d2->ts - d1->ts) - (dists->data[dists->size - 1] - dists->data[0]);
-	/*gsl_vector_free(tmp_m);*/
 
 	t_dt = d2->ts - d1->ts;
 	sp_top = 2 * S_dif / t_dt;
@@ -127,8 +108,6 @@ static int variable_vfunc(dpt_t *d1, dpt_t *d2, double dist_st,
 
 static void plan_adjust_z(plan_t *self, double z)
 {
-	/*double cur_z = *self->cur->z;*/
-
 	double mod_z = *self->cur->z + gsl_vector_get(self->adj, 2) + z;
 	/*printf("%g:%g:%g::%g\n", *self->cur->z, gsl_vector_get(self->adj, 2), z,*/
 	/*mod_z);*/
@@ -155,7 +134,6 @@ static dpt_t *dpt_hist_step(plan_t *p)
 
 	d->ts = p->dists->data[p->next_i];
 	d->vps = p->vels->data[p->next_i];
-	/*printf("eval:%g\n", d->ts);*/
 	gsl_vector_set(d->pos, 0, gsl_spline_eval(p->x_spl, d->ts, p->acc));
 	gsl_vector_set(d->pos, 1, gsl_spline_eval(p->y_spl, d->ts, p->acc));
 	gsl_vector_set(d->pos, 2, gsl_spline_eval(p->z_spl, d->ts, p->acc));
@@ -175,7 +153,7 @@ static dpt_t *dpt_hist_repeat(plan_t *p)
 
 	d_new->ts = d_old->ts + 1;
 	d_new->vps = d_old->vps;
-	/*printf("repeat eval:%g\n", d_new->ts);*/
+
 	gsl_vector_set(d_new->pos, 0, gsl_vector_get(d_old->pos, 0));
 	gsl_vector_set(d_new->pos, 1, gsl_vector_get(d_old->pos, 1));
 	gsl_vector_set(d_new->pos, 2, gsl_vector_get(d_old->pos, 2));
@@ -301,26 +279,29 @@ static void plan_next(plan_t *self, bool repeat)
 	}
 }
 
-static void plan_reset(plan_t *self)
+static void plan_resched(plan_t *self)
 {
 	glist_clear(self->raw_pts);
 	glist_clear(self->pts);
-	dpt_free(self->target);
 
-	self->target = NULL;
 	self->need_plan = true;
+	self->need_sched = true;
 	self->next_i = 0;
 }
 
-static void plan_make(plan_t *self, enum lfsm_state state, glist_t *pts)
+static void plan_next_stage(plan_t *self)
 {
-	fsm_reset(self->fsm);
-	plan_reset(self);
-	glist_copy_to(pts, self->raw_pts);
-	dpt_t *pt = glist_get(pts, 0);
-	self->target = dpt_clone(pt);
+	if (!self->raw_pts->count) {
+		plan_resched(self);
+		return;
+	}
 
-	fsm_set(self->fsm, state);
+	glist_clear(self->pts);
+	fsm_set(self->fsm,
+			((dpt_t *)glist_get(self->raw_pts, 0))->up ? LFSMS_ASC : LFSMS_TRV);
+
+	self->need_plan = true;
+	self->next_i = 0;
 }
 
 static int act_ascending(fsm_t *fsm)
@@ -347,40 +328,30 @@ static int act_ascending(fsm_t *fsm)
 		start = dpt_clone(dpt_hist_get(p, 0));
 		start->vps = 1.0;
 
-		/*start = dpt_new(p->cur->pos->arr, p->cur->vel->arr, 0, 0.0, p->stash);*/
-		end_ts = start->ts + TOP_TM_C * (p->target->ts - start->ts);
-		dx = *p->target->x - *start->x;
-		dy = *p->target->y - *start->y;
+		dpt_t *target = glist_get(p->raw_pts, 0);
+		end_ts = start->ts + TOP_TM_C * (target->ts - start->ts);
+		dx = *target->x - *start->x;
+		dy = *target->y - *start->y;
 		step_dist = sqrtf(dx * dx + dy * dy);
 
 		walk_h[l->idx] =
 			get_walk_height(step_dist, g_model->sens->abs_std_leg_h);
 
-		double end_pos[3] = {
-			*start->x + END_OF_C * (*p->target->x - *start->x),
-			*start->y + END_OF_C * (*p->target->y - *start->y), walk_h[l->idx]
-		};
+		double end_pos[3] = { *start->x + END_OF_C * (*target->x - *start->x),
+							  *start->y + END_OF_C * (*target->y - *start->y),
+							  walk_h[l->idx] };
 
 		end = dpt_new(end_pos, end_ts, 1.0);
 
 		dpt_t *post = dpt_clone(end);
 		post->ts += 1.0;
 
-		double mid_pos[3] = {
-			*start->x + MID_OF_C * (*p->target->x - *start->x),
-			*start->y + MID_OF_C * (*p->target->y - *start->y),
-			*start->z + MID_PT_HT_C * (walk_h[l->idx] - *start->z)
-		};
+		double mid_pos[3] = { *start->x + MID_OF_C * (*target->x - *start->x),
+							  *start->y + MID_OF_C * (*target->y - *start->y),
+							  *start->z +
+								  MID_PT_HT_C * (walk_h[l->idx] - *start->z) };
 
 		mid = dpt_new(mid_pos, (start->ts + end_ts) / 2, 1.0);
-
-		/*start->vps = 1.0; // maybe not needed*/
-		/*mid->vps = 1.0;*/
-		/*end->vps = 1.0;*/
-
-		/*start->vps = 0.0; // maybe not needed*/
-		/*mid->vps = get_d2_speed(start, mid);*/
-		/*end->vps = get_d2_speed(mid, end);*/
 
 		glist_push(p->pts, pre);
 		glist_push(p->pts, start);
@@ -388,7 +359,6 @@ static int act_ascending(fsm_t *fsm)
 		glist_push(p->pts, end);
 		glist_push(p->pts, post);
 
-		/*fill_diffs(p, p->pts);*/
 		plan_make_steps(p);
 		p->need_plan = false;
 	}
@@ -396,11 +366,12 @@ static int act_ascending(fsm_t *fsm)
 	if (p->next_i == p->n_steps) {
 		/* TODO: commenting these may break something <26-02-23, yourname> */
 		/* double wh = self.info.walk_h*/
-		dpt_t *c_tg = dpt_clone(p->target);
-		plan_reset(p);
-		p->target = c_tg;
-		/*self.info.walk_h = wh*/
 		fsm_next(fsm, LFSMA_END);
+		glist_clear(p->pts);
+		p->need_plan = true;
+		p->next_i = 0;
+		/*self.info.walk_h = wh*/
+		fsm_execute(fsm);
 	} else {
 		plan_next(p, false);
 	}
@@ -425,20 +396,19 @@ static int act_descending(fsm_t *fsm)
 		pre = dpt_clone(dpt_hist_get(p, -1));
 
 		start = dpt_clone(dpt_hist_get(p, 0));
-		end = dpt_new2(p->target->pos, p->target->ts, 1.0);
+		end = glist_remove(p->raw_pts, 0);
 
 		post = dpt_clone(end);
 		post->ts += 1.0;
 
-		double mid_ts = roundf(start->ts + TM_C * (p->target->ts - start->ts));
+		double mid_ts = roundf(start->ts + TM_C * (end->ts - start->ts));
 
-		double mid_pos[3] = { *start->x + OF_C * (*p->target->x - *start->x),
-							  *start->y + OF_C * (*p->target->y - *start->y),
+		double mid_pos[3] = { *start->x + OF_C * (*end->x - *start->x),
+							  *start->y + OF_C * (*end->y - *start->y),
 							  *end->z + HT_C * (g_model->sens->walk_h[l->idx] -
 												*end->z) };
 
 		mid = dpt_new(mid_pos, mid_ts, 1.0);
-		/*mid->vps = get_d2_speed(start, mid);*/
 
 		glist_push(p->pts, pre);
 		glist_push(p->pts, start);
@@ -446,19 +416,19 @@ static int act_descending(fsm_t *fsm)
 		glist_push(p->pts, end);
 		glist_push(p->pts, post);
 
-		/*fill_diffs(p, p->pts);*/
-
 		plan_make_steps(p);
 
 		p->need_plan = false;
 	}
 
 	if (g_model->sens->touch_f->data[l->idx] > 0.0) {
-		plan_reset(p);
+		plan_resched(p);
 		fsm_next(fsm, LFSMA_HIT);
+		fsm_execute(fsm);
 	} else if (p->next_i == p->n_steps) {
-		plan_reset(p);
 		fsm_next(fsm, LFSMA_END);
+		plan_next_stage(p);
+		fsm_execute(fsm);
 	} else {
 		plan_next(p, false);
 	}
@@ -475,16 +445,25 @@ static int act_traversing(fsm_t *fsm)
 		DBG("%s: Traversing\n", l->name);
 		l->bal = true;
 
-		for (int i = MIN(-MIN_N_INTERP + p->raw_pts->count + 1, -1); i <= 0;
-			 i++) {
+		int trv_cnt = 0;
+
+		for (size_t i = 0; i < p->raw_pts->count; i++) {
+			dpt_t *d = glist_get(p->raw_pts, i);
+			if (d->up) {
+				break;
+			}
+			trv_cnt++;
+		}
+
+		for (int i = MIN(-MIN_N_INTERP + trv_cnt + 1, -1); i <= 0; i++) {
 			dpt_t *d = dpt_hist_get(p, i);
 			dpt_t *dc = dpt_clone(d);
 			glist_push(p->pts, dc);
 		}
 
-		for (size_t i = 0; i < p->raw_pts->count; i++) {
-			dpt_t *dc = dpt_clone((dpt_t *)p->raw_pts->array[i]);
-			glist_push(p->pts, dc);
+		if (glist_move_n_to(p->raw_pts, p->pts, 0, p->pts->count, trv_cnt)) {
+			ERR(ERR_INVALID_INPUT);
+			return 1;
 		}
 
 		plan_make_steps(p);
@@ -492,8 +471,9 @@ static int act_traversing(fsm_t *fsm)
 	}
 
 	if (p->next_i == p->n_steps) {
-		plan_reset(p);
 		fsm_next(fsm, LFSMA_END);
+		plan_next_stage(p);
+		fsm_execute(fsm);
 	} else {
 		plan_adjust_z(p, g_model->sens->balance->data[l->idx]);
 		plan_next(p, false);
@@ -634,25 +614,6 @@ dpt_t *dpt_new3(gsl_vector *pos, double ts, double vps)
 	return p;
 }
 
-/*
-dpt_t *dpt_from_spl(plan_t *p, double ts, double vps)
-{
-	double arr[3] = { 0 };
-	dpt_t *d;
-
-	if (!p || !p->x_spl || !p->y_spl || !p->z_spl) {
-		return NULL;
-	}
-
-	arr[0] = gsl_spline_eval(p->x_spl, ts, p->acc);
-	arr[1] = gsl_spline_eval(p->y_spl, ts, p->acc);
-	arr[2] = gsl_spline_eval(p->z_spl, ts, p->acc);
-	d = dpt_new(arr, ts, vps);
-
-	return d;
-}
-*/
-
 dpt_t *dpt_clone(dpt_t *d)
 {
 	dpt_t *p;
@@ -673,6 +634,7 @@ dpt_t *dpt_clone(dpt_t *d)
 
 	p->ts = d->ts;
 	p->vps = d->vps;
+	p->up = d->up;
 
 	return p;
 }
@@ -699,7 +661,6 @@ int plan_new(plan_t *p)
 
 	p->need_plan = true;
 	p->cur = st_p;
-	p->target = NULL;
 	p->raw_pts = glist_new(8);
 	glist_set_free_cb(p->raw_pts, (void (*)(void *))dpt_free);
 	p->pts = glist_new(16);
@@ -735,12 +696,8 @@ void plan_free(plan_t *p)
 	glist_free(p->raw_pts);
 	glist_free(p->pts);
 	fsm_free(p->fsm);
-	/*glist_free(p->targets);*/
-	/*glist_free(p->steps);*/
 
 	gsl_vector_free(p->adj);
-
-	/*stash_free(p->stash);*/
 
 	gsl_spline_free(p->x_spl);
 	gsl_spline_free(p->y_spl);
@@ -753,38 +710,25 @@ void plan_step(plan_t *self)
 	if (fsm_execute(self->fsm)) {
 		ERR("FSM execute failed\n");
 	}
-
-	/*plan_compensate(self);*/
 }
 
-void plan_make_movement(plan_t *self, double *pts, size_t n_pts, bool do_lift)
+void plan_make_movement(plan_t *self, gsl_matrix *pos, gsl_block *ups)
 {
-	/*(void)self;*/
-	/*(void)pts;*/
-	/*(void)n_pts;*/
-	(void)do_lift;
-
 	double tsum;
-	dpt_t *p, *pp;
-	glist_t *lst;
+	dpt_t *pp;
 
-	lst = glist_new(n_pts);
+	glist_clear(self->raw_pts);
 	pp = dpt_hist_get(self, 0);
 	tsum = pp->ts;
 
-	if (do_lift) {
-		p = dpt_new(pts + 3 * (n_pts - 1), tsum + 50, 1.0);
-		glist_push(lst, p);
-		plan_make(self, LFSMS_ASC, lst);
-	} else {
-		for (size_t i = 0; i < n_pts; ++i) {
-			tsum += 50;
-			p = dpt_new(pts, tsum, 1.0);
-			glist_push(lst, p);
-			pts += 3;
-		}
-		plan_make(self, LFSMS_TRV, lst);
+	for (size_t i = 0; i < pos->size1; ++i) {
+		tsum += 50;
+		gsl_vector_view row = gsl_matrix_row(pos, i);
+		dpt_t *p = dpt_new2(&row.vector, tsum, 1.0);
+		p->up = ups->data[i];
+		glist_push(self->raw_pts, p);
 	}
 
-	glist_free_shallow(lst);
+	fsm_set(self->fsm, ups->data[0] ? LFSMS_ASC : LFSMS_TRV);
+	plan_next_stage(self);
 }

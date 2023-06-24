@@ -16,9 +16,9 @@
 /**
  * @brief Doubles capacity of list and copies entries to new array
  * @param[in, out] *lst	Pointer to list to extend
- * @return 0 if successful
+ * @return Void
  */
-static int extend_storage(glist_t *lst)
+static void extend_storage(glist_t *lst)
 {
 	void **new_array;
 	new_array = calloc(lst->cap * 2, sizeof(void *));
@@ -28,13 +28,9 @@ static int extend_storage(glist_t *lst)
 	}
 
 	memcpy(new_array, lst->array, sizeof(void *) * lst->cap);
-	if (!(lst->flags & GLF_ARR_ST)) {
-		free(lst->array);
-	}
+	free(lst->array);
 	lst->array = new_array;
 	lst->cap *= 2;
-
-	return 0;
 }
 
 /**
@@ -91,7 +87,7 @@ void glist_clear(glist_t *lst)
 	for (size_t i = 0; i < lst->count; i++) {
 		if (lst->free_cb != NULL) {
 			lst->free_cb(lst->array[i]);
-		} else if (!(lst->flags & GLF_ELEM_ST)) {
+		} else {
 			free(lst->array[i]);
 		}
 	}
@@ -107,26 +103,18 @@ void glist_clear_shallow(glist_t *lst)
 
 void glist_free(glist_t *lst)
 {
-	if (lst != NULL) {
+	if (lst) {
 		glist_clear(lst);
-		if (!(lst->flags & GLF_ARR_ST)) {
-			free(lst->array);
-		}
-		if (!(lst->flags & GLF_SELF_ST)) {
-			free(lst);
-		}
+		free(lst->array);
+		free(lst);
 	}
 }
 
 void glist_free_shallow(glist_t *lst)
 {
-	if (lst != NULL) {
-		if (!(lst->flags & GLF_ARR_ST)) {
-			free(lst->array);
-		}
-		if (!(lst->flags & GLF_SELF_ST)) {
-			free(lst);
-		}
+	if (lst) {
+		free(lst->array);
+		free(lst);
 	}
 }
 
@@ -143,10 +131,8 @@ void glist_extend(glist_t *dst, glist_t *src)
 
 int glist_push(glist_t *lst, void *value)
 {
-	int status;
-
-	if (lst->count == lst->cap && (status = extend_storage(lst))) {
-		return status;
+	if (lst->count == lst->cap) {
+		extend_storage(lst);
 	}
 
 	lst->array[lst->count++] = value;
@@ -163,18 +149,61 @@ void *glist_get(glist_t *lst, int index)
 	return lst->array[idx];
 }
 
+void *glist_remove(struct glist *lst, int index)
+{
+	int idx = index;
+	if (convert_index_glist(lst, &idx) || (size_t)idx >= lst->count) {
+		return NULL;
+	}
+
+	void *value = lst->array[idx];
+
+	for (size_t i = index; i < lst->count - 1; i++) {
+		lst->array[i] = lst->array[i + 1];
+	}
+
+	lst->count--;
+
+	return value;
+}
+
 int glist_copy_to(glist_t *src, glist_t *dst)
 {
 	while (src->count + dst->count >= dst->cap) {
-		int status = extend_storage(dst);
-		if (status) {
-			return status;
-		}
+		extend_storage(dst);
 	}
 
 	for (size_t i = 0; i < src->count; i++) {
 		dst->array[dst->count++] = src->array[i];
 	}
+
+	return 0;
+}
+
+int glist_move_n_to(glist_t *src, glist_t *dst, size_t soff, size_t doff,
+					size_t n)
+{
+	if (soff + n > n) {
+		ERR(ERR_INVALID_INPUT);
+		return 1;
+	}
+
+	while (dst->count + n >= dst->cap) {
+		extend_storage(dst);
+	}
+
+	// make space for new entries
+	memmove(dst->array + doff + n, dst->array + doff,
+			sizeof(void *) * (dst->count - doff));
+	// copy entries
+	memcpy(dst->array + doff, src->array + soff, sizeof(void *) * n);
+	// remove leftover empty space in src
+	memmove(src->array + soff, src->array + soff + n,
+			sizeof(void *) * (src->count - soff - n));
+	memset(src->array + src->count - n, 0, sizeof(void *) * n);
+
+	src->count -= n;
+	dst->count += n;
 
 	return 0;
 }

@@ -10,14 +10,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-enum gl_fl {
-	GLF_NO_ST = 0,
-	GLF_SELF_ST = 1 << 0,
-	GLF_ARR_ST = 1 << 1,
-	GLF_ELEM_ST = 1 << 2,
-	GLF_FULL_ST = GLF_SELF_ST | GLF_ARR_ST | GLF_ELEM_ST,
-};
-
 /**
  * @brief Implementation of generic list data structure
  */
@@ -28,7 +20,6 @@ typedef struct glist {
 	size_t count;
 	/**Maximum capacity of internal array*/
 	size_t cap;
-	enum gl_fl flags;
 	/**Callback function to be called for each entry when freeing or clearing*/
 	void (*free_cb)(void *);
 } glist_t;
@@ -89,6 +80,7 @@ int glist_push(glist_t *lst, void *value);
  * @return Void
  */
 void glist_extend(glist_t *dst, glist_t *src);
+
 /**
  * @brief Gets item from list at specific index
  * @param[in] *lst 		List pointer to retrieve item from
@@ -98,12 +90,32 @@ void glist_extend(glist_t *dst, glist_t *src);
 void *glist_get(glist_t *lst, int index);
 
 /**
+ * @brief Pops item from list at specific index
+ * @param[in] *lst 		List pointer to retrieve item from
+ * @param[in] index 	Index to get item at
+ * @return Pointer to value or NULL on failure.
+ */
+void *glist_remove(glist_t *lst, int index);
+
+/**
  * @brief Function copies entriies from one list to another
  * @param[in] *src 			Pointer to list to copy entries from 
  * @param[in, out] *dst 	Pointer to list to copy entries to
  * @return 0 if successful
  */
 int glist_copy_to(glist_t *src, glist_t *dst);
+
+/**
+ * @brief Function copies entriies from one list to another
+ * @param[in] *src 			Pointer to list to copy entries from 
+ * @param[in, out] *dst 	Pointer to list to copy entries to
+ * @param[in] soff 			Offset to start moving
+ * @param[in] doff 			Offset to place moved elements
+ * @param[in] n 			Number of elements to move
+ * @return 0 if successful
+ */
+int glist_move_n_to(glist_t *src, glist_t *dst, size_t soff, size_t doff,
+					size_t n);
 
 /**
  * @brief Gets nubmer of items stored in glist
@@ -133,19 +145,18 @@ void glist_set_free_cb(glist_t *lst, void (*cb)(void *));
 
 /* TODO:  <24-02-23, yourname> */
 //creates shallow clone unless clone_cb is set
-glist_t *clone_glist(glist_t *lst);
+//glist_t *clone_glist(glist_t *lst);
 //copies len bytes from value and appends it at the end of list
-int push_glist2(glist_t *lst, void *value, size_t len);
+//int push_glist2(glist_t *lst, void *value, size_t len);
 //inserts value at specified index
-int get_idx_glist(glist_t *lst, void *value);
-void *remove_glist(glist_t *lst, int index);
+//int get_idx_glist(glist_t *lst, void *value);
 //deletes and frees element at index
-int delete_glist(glist_t *lst, int index);
+//int delete_glist(glist_t *lst, int index);
 //same as delete_glist but does not free element at index
 //same as remove_glist but does not return element at index
-int forget_glist(glist_t *lst, int index);
-void **get_array_glist(glist_t *lst);
+//int forget_glist(glist_t *lst, int index);
+//void **get_array_glist(glist_t *lst);
 //sets callback for every element for clone_glist
 //cb(void **<pointer to clone data pointer>, void *<source data pointer>)
-void set_clone_cb_glist(glist_t *lst, void (*cb)(void **, void *));
+//void set_clone_cb_glist(glist_t *lst, void (*cb)(void **, void *));
 

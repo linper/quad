@@ -156,7 +156,6 @@ static stance_t *stance_create(gsl_matrix *pos, gsl_matrix *def_pos,
 		FATAL(ERR_MALLOC_FAIL);
 	}
 
-	/*st->bpts = matrix_calloc(N_LEGS - 1, 2);*/
 	st->pts = matrix_clone(pos);
 	st->mod_pts = matrix_clone(pos);
 	st->orig_pts = matrix_clone(pos);
@@ -976,11 +975,12 @@ static void detail_path(movement_t *mv)
 	gsl_block_free(tpts);
 }
 
-void get_movement(gsl_vector *dir, gsl_vector *pt)
+void get_movement(gsl_vector *dir, gsl_matrix *pts)
 {
 	/*size_t n_st = 5;*/
 	size_t n_st = 7;
-	movement_t *mv = create_movement(n_st, dir, pt);
+	gsl_vector_view pt = gsl_matrix_row(pts, 0);
+	movement_t *mv = create_movement(n_st, dir, &pt.vector);
 	compose_stances(mv);
 	movement_optimize(mv);
 	detail_path(mv);
