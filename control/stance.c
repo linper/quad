@@ -8,10 +8,10 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#include <mth.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -29,45 +29,13 @@
 #include <gsl/gsl_spline.h>
 
 #include <log.h>
+#include <mth.h>
 #include <model.h>
+#include <plan.h>
 #include <stance.h>
 
 #define LEG_ELLIPSE_A 0.21
 #define LEG_ELLIPSE_B 0.18
-
-struct stance;
-struct movement;
-
-typedef struct stance {
-	struct stance *next;
-	struct stance *prev;
-	gsl_matrix *pts; // (4 x 2)
-	gsl_matrix *orig_pts; // (4 x 2)
-	gsl_matrix *def_pts; // (4 x 2)
-	gsl_vector *com; // (2)
-	gsl_vector *bcom; // (2)
-	gsl_vector *com_off; // (2)
-	gsl_vector *dir; // (2)
-	size_t pidx; // leg idx to move to reach this stance
-	double min_loss;
-	gsl_matrix *barrier; // (2 x 2) possible barrier to cross to reach this stance
-	gsl_matrix *bpts; // (3 x 2)
-	gsl_matrix *mod_pts; // (4 x 2)
-	gsl_vector *mod_com; // (2)
-	gsl_vector *mod_bcom; // (2)
-} stance_t;
-
-typedef struct movement {
-	struct stance *st;
-	size_t n;
-	double loss;
-	gsl_matrix *coms; // (n, 2)
-	gsl_matrix *bcoms; // (n, 2)
-	gsl_matrix *path; // (n, 2)
-	gsl_spline *x_spl;
-	gsl_spline *y_spl;
-	gsl_interp_accel *acc;
-} movement_t;
 
 static stance_t *stance_optimize(stance_t *self, size_t n);
 static void stance_plot(stance_t *self);
@@ -89,7 +57,7 @@ static void stance_free(stance_t *self, bool all)
 	gsl_vector_free(self->com_off);
 	gsl_matrix_free(self->mod_pts);
 	gsl_vector_free(self->mod_com);
-	gsl_vector_free(self->mod_bcom);
+	/*gsl_vector_free(self->mod_bcom);*/
 	free(self);
 
 	if (all && next) {
@@ -97,12 +65,14 @@ static void stance_free(stance_t *self, bool all)
 	}
 }
 
-static void movement_free(movement_t *self)
+void movement_free(movement_t *self)
 {
 	if (!self) {
 		return;
 	}
 
+	gsl_matrix_free(self->target_dirs);
+	gsl_matrix_free(self->target_path);
 	gsl_matrix_free(self->bcoms);
 	gsl_matrix_free(self->coms);
 	gsl_matrix_free(self->path);
@@ -125,7 +95,7 @@ static stance_t *stance_create_from_model(gsl_vector *dir, gsl_vector *com)
 	st->mod_pts = matrix_calloc(N_LEGS, 2);
 	st->def_pts = matrix_calloc(N_LEGS, 2);
 	st->bcom = vector_calloc(2);
-	st->mod_bcom = vector_calloc(2);
+	/*st->mod_bcom = vector_calloc(2);*/
 	st->com_off = vector_calloc(2);
 	st->com = vector_calloc(2);
 	st->mod_com = vector_calloc(2);
@@ -138,7 +108,8 @@ static stance_t *stance_create_from_model(gsl_vector *dir, gsl_vector *com)
 		}
 	}
 
-	vector_copy_to(st->com, com, 0, 0, 2);
+	/*vector_copy_to(st->com, com, 0, 0, 2);*/
+	(void)com;
 	st->orig_pts = matrix_clone(st->pts);
 	st->dir = vector_clone(dir);
 
@@ -164,7 +135,7 @@ static stance_t *stance_create(gsl_matrix *pos, gsl_matrix *def_pos,
 	st->mod_com = vector_clone(com);
 	st->dir = vector_clone(dir);
 	st->bcom = vector_calloc(2);
-	st->mod_bcom = vector_calloc(2);
+	/*st->mod_bcom = vector_calloc(2);*/
 	st->com_off = vector_calloc(2);
 
 	st->pidx = 0;
@@ -187,21 +158,35 @@ static stance_t *stance_append_create(stance_t *s)
 	return st;
 }
 
-static movement_t *create_movement(size_t n, gsl_vector *dir, gsl_vector *com)
+static movement_t *create_movement(size_t n, gsl_matrix *pts, gsl_matrix *dirs,
+								   bool resched)
 {
 	stance_t *ss;
+	movement_t *mv;
 
-	movement_t *mv = calloc(1, sizeof(movement_t));
-	if (!mv) {
-		FATAL(ERR_MALLOC_FAIL);
+	if (resched && g_model->move) {
+		mv = g_model->move;
+		stance_free(mv->st, true);
+
+	} else {
+		mv = calloc(1, sizeof(movement_t));
+		if (!mv) {
+			FATAL(ERR_MALLOC_FAIL);
+		}
+
+		mv->acc = gsl_interp_accel_alloc();
+		if (!mv->acc) {
+			FATAL(ERR_MALLOC_FAIL);
+		}
+
+		mv->target_path = pts;
+		mv->target_dirs = dirs;
 	}
 
-	mv->acc = gsl_interp_accel_alloc();
-	if (!mv->acc) {
-		FATAL(ERR_MALLOC_FAIL);
-	}
+	gsl_vector_view com = gsl_matrix_row(mv->target_path, 0);
+	gsl_vector_view dir = gsl_matrix_row(mv->target_dirs, 0);
 
-	mv->st = stance_create_from_model(dir, com);
+	mv->st = stance_create_from_model(&dir.vector, &com.vector);
 
 	ss = mv->st;
 	mv->n = n + 1;
@@ -212,6 +197,7 @@ static movement_t *create_movement(size_t n, gsl_vector *dir, gsl_vector *com)
 		ss = ss->next;
 	}
 
+	g_model->move = mv;
 	return mv;
 }
 
@@ -549,8 +535,6 @@ static stance_t *stance_optimize(stance_t *self, size_t n)
 	min_pt = vector_calloc(2);
 	pt = vector_calloc(2);
 
-	/*calc_bcom(self->pts, -1, self->bcom);*/
-	/*centroid_of_polygon(self->bcom, self->pts);*/
 	vector_copy_to_origin(self->bcom, self->com);
 
 	for (size_t ni = 0; ni < n; ni++) {
@@ -655,7 +639,7 @@ static void eval_mv_ins_trig(movement_t *mv, double *val)
 static double movement_loss(movement_t *mv)
 {
 	const double STRAIGHTNESS_C = 0.25;
-	const double INSIDE_TRIG_C = 0.7;
+	const double INSIDE_TRIG_C = 1.0;
 	const double STD_DISTS_C = 1.5;
 
 	double val, stdd_part = 0, len_part = 0, trig_part = 0;
@@ -915,7 +899,6 @@ static void compose_stances(movement_t *mv)
 
 	while (st) {
 		matrix_copy_to_origin(st->mod_pts, st->pts);
-		vector_copy_to_origin(st->mod_bcom, st->bcom);
 		vector_copy_to_origin(st->mod_com, st->com);
 
 		matrix_sub_vec_rows(st->mod_pts, com_off_sum);
@@ -946,7 +929,6 @@ static void compose_stances(movement_t *mv)
 	/*mv->path = path;*/
 	mv->path = matrix_clone(mod_coms);
 	mv->coms = matrix_clone(mod_coms);
-	/*mv->bcoms = matrix_clone(path);*/
 	mv->bcoms = path;
 }
 
@@ -975,15 +957,80 @@ static void detail_path(movement_t *mv)
 	gsl_block_free(tpts);
 }
 
-void get_movement(gsl_vector *dir, gsl_matrix *pts)
+static void make_plans(movement_t *mv)
 {
-	/*size_t n_st = 5;*/
-	size_t n_st = 7;
-	gsl_vector_view pt = gsl_matrix_row(pts, 0);
-	movement_t *mv = create_movement(n_st, dir, &pt.vector);
+	double init_ts[N_LEGS] = { 0 };
+	glist_t *lsts[N_LEGS] = { 0 };
+	/*gsl_matrix *offs = matrix_sub_n(mv->path, mv->coms);*/
+	gsl_matrix *offs = matrix_sub_n(mv->coms, mv->path);
+	gsl_matrix *pos = matrix_calloc(N_LEGS, 3);
+	matrix_copy_to_origin(pos, mv->st->orig_pts);
+	matrix_fill_col(pos, 2, g_model->leg_tar_h);
+	/*printf("offs:");*/
+	/*matrix_print(offs);*/
+
+	for (size_t i = 0; i < N_LEGS; i++) {
+		plan_t *p = &g_model->cw_legs[i]->plan;
+		glist_clear(p->raw_pts);
+		lsts[i] = glist_new(16);
+	}
+
+	stance_t *st = mv->st;
+
+	gsl_matrix *d_path = matrix_calloc(mv->path->size1, 3);
+	matrix_copy_to_origin(d_path, mv->path);
+	matrix_increments(d_path);
+
+	size_t j = 0;
+	//skip first
+	while ((st = st->next)) {
+		/*gsl_vector_view row = gsl_matrix_row(offs, j++);*/
+		gsl_vector_view row = gsl_matrix_row(d_path, j);
+		matrix_sub_vec_rows(pos, &row.vector);
+		for (size_t i = 0; i < N_LEGS; i++) {
+			/*init_ts[i] += 100;*/
+			init_ts[i] += 50;
+			gsl_vector_view pos_row = gsl_matrix_row(pos, i);
+			/*gsl_vector_sub(&pos_row.vector, &row.vector);*/
+			bool up = false;
+			if (st->pidx == i) {
+				gsl_vector_view cur_pts_row = gsl_matrix_row(st->pts, i);
+				gsl_vector_view prev_pts_row = gsl_matrix_row(st->prev->pts, i);
+				vector_add_ddim(&pos_row.vector, &cur_pts_row.vector);
+				vector_sub_ddim(&pos_row.vector, &prev_pts_row.vector);
+
+				up = true;
+			}
+
+			dpt_t *pt = dpt_from_vec(&pos_row.vector, init_ts[i], 1.0, up);
+			glist_push(lsts[i], pt);
+		}
+		j++;
+	}
+
+	for (size_t i = 0; i < N_LEGS; i++) {
+		plan_make_movement(&g_model->cw_legs[i]->plan, lsts[i]);
+		/*block_print(g_model->cw_legs[i]->plan.vels);*/
+		/*block_print(g_model->cw_legs[i]->plan.dists);*/
+	}
+
+	gsl_matrix_free(offs);
+	gsl_matrix_free(pos);
+}
+
+void get_movement(gsl_matrix *pts, gsl_matrix *dirs, bool resched)
+{
+	size_t n_st = 5;
+	/*size_t n_st = 7;*/
+	/*size_t n_st = 10;*/
+	/*size_t n_st = 20;*/
+	movement_t *mv = create_movement(n_st, pts, dirs, resched);
 	compose_stances(mv);
 	movement_optimize(mv);
 	detail_path(mv);
+	make_plans(mv);
 	movement_plot(mv);
-	movement_free(mv);
+	/*sleep(1);*/
+	/*movement_free(mv);*/
+	mv->need_sched = false;
 }

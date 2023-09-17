@@ -7,13 +7,14 @@
 
 #pragma once
 
-#include "log.h"
 #include <stdbool.h>
 #include <math.h>
 
 #include <gsl/gsl_block_double.h>
 #include <gsl/gsl_matrix_double.h>
 #include <gsl/gsl_vector_double.h>
+
+#include "log.h"
 
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define MAX(a, b) ((a) >= (b) ? (a) : (b))
@@ -42,9 +43,11 @@ void vbuf_clear(vbuf_t *b);
 *  MATRIX  *
 ************/
 gsl_matrix *matrix_from_array(size_t n_rows, size_t n_cols, const double *arr);
-int matrix_update_array(gsl_matrix *m, size_t n_rows, size_t n_cols,
+int matrix_update_array(const gsl_matrix *m, size_t n_rows, size_t n_cols,
 						const double *arr);
 gsl_matrix *matrix_del_row_n(gsl_matrix *m, size_t idx);
+int matrix_fill_row(gsl_matrix *m, size_t idx, double val);
+int matrix_fill_col(gsl_matrix *m, size_t idx, double val);
 int matrix_add_vec_rows(gsl_matrix *m, gsl_vector *v);
 int matrix_sub_vec_rows(gsl_matrix *m, gsl_vector *v);
 gsl_vector *matrix_sum_axis(gsl_matrix *m, int axis);
@@ -59,8 +62,8 @@ gsl_matrix *matrix_add_constant_n(gsl_matrix *v, const double l);
 gsl_matrix *matrix_linspace(gsl_vector *start, gsl_vector *end, size_t n);
 gsl_matrix *matrix_dot(gsl_matrix *a, gsl_matrix *b);
 gsl_vector *matrix_vector_dot(gsl_matrix *a, gsl_vector *b);
-int matrix_copy_to(gsl_matrix *dst, gsl_matrix *src, size_t di, size_t dj,
-				   size_t si, size_t sj, size_t ni, size_t nj);
+int matrix_copy_to(const gsl_matrix *dst, const gsl_matrix *src, size_t di,
+				   size_t dj, size_t si, size_t sj, size_t ni, size_t nj);
 struct json_object *matrix_to_json(gsl_matrix *m);
 void matrix_print(gsl_matrix *m);
 
@@ -85,6 +88,9 @@ int vector_copy_to(gsl_vector *dst, gsl_vector *src, size_t di, size_t si,
 gsl_vector *vector_clone(gsl_vector *v);
 gsl_vector *vector_linspace(double start, double end, size_t n);
 gsl_matrix *mat_rot_from_2vec(gsl_vector *from, gsl_vector *to);
+void matrix_increments(gsl_matrix *m);
+void vector_sub_ddim(gsl_vector *a, gsl_vector *b);
+void vector_add_ddim(gsl_vector *a, gsl_vector *b);
 gsl_vector *vector_sub_n(gsl_vector *a, gsl_vector *b);
 gsl_vector *vector_add_n(gsl_vector *a, gsl_vector *b);
 gsl_vector *vector_mul_n(gsl_vector *a, gsl_vector *b);
@@ -115,8 +121,8 @@ bool ellipse_point_inside(double a, double b, double x, double y, double *val);
 bool ellipse_line_intersect(double a, double b, double k, double c, double *x1,
 							double *y1, double *x2, double *y2);
 double area(const double *p1, const double *p2, const double *p3);
-bool is_inside_triangle(gsl_vector *pt, gsl_matrix *trig, double trig_acale,
-						double *cof);
+bool is_inside_triangle(const gsl_vector *pt, gsl_matrix *trig,
+						double trig_acale, double *cof);
 double bound_data(double dt, double lo, double hi);
 int centroid_of_polygon(gsl_vector *res, gsl_matrix *pts);
 
@@ -140,7 +146,8 @@ static inline gsl_matrix *matrix_calloc(size_t n1, size_t n2)
 	return m;
 }
 
-static inline int matrix_copy_to_origin(gsl_matrix *dst, gsl_matrix *src)
+static inline int matrix_copy_to_origin(const gsl_matrix *dst,
+										const gsl_matrix *src)
 {
 	return matrix_copy_to(dst, src, 0, 0, 0, 0, src->size1, src->size2);
 }

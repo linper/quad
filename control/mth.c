@@ -5,7 +5,6 @@
  * @date 2023-02-04
  */
 
-#include <gsl/gsl_block_double.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -14,6 +13,7 @@
 
 #include <gsl/gsl_matrix_double.h>
 #include <gsl/gsl_vector_double.h>
+#include <gsl/gsl_block_double.h>
 
 #include <json-c/json_object.h>
 #include <json-c/json_types.h>
@@ -166,7 +166,7 @@ gsl_matrix *matrix_from_array(size_t n_rows, size_t n_cols, const double *arr)
 	return m;
 }
 
-int matrix_update_array(gsl_matrix *m, size_t n_rows, size_t n_cols,
+int matrix_update_array(const gsl_matrix *m, size_t n_rows, size_t n_cols,
 						const double *arr)
 {
 	if (!m || !arr) {
@@ -311,8 +311,8 @@ gsl_matrix *matrix_linspace(gsl_vector *start, gsl_vector *end, size_t n)
 	return m;
 }
 
-int matrix_copy_to(gsl_matrix *dst, gsl_matrix *src, size_t di, size_t dj,
-				   size_t si, size_t sj, size_t ni, size_t nj)
+int matrix_copy_to(const gsl_matrix *dst, const gsl_matrix *src, size_t di,
+				   size_t dj, size_t si, size_t sj, size_t ni, size_t nj)
 {
 	if (!dst || !src || dst->size1 < di + ni || dst->size2 < dj + nj ||
 		src->size1 < si + ni || src->size2 < sj + nj) {
@@ -345,6 +345,34 @@ gsl_matrix *matrix_del_row_n(gsl_matrix *m, size_t idx)
 	}
 
 	return d;
+}
+
+int matrix_fill_row(gsl_matrix *m, size_t idx, double val)
+{
+	if (!m || m->size1 <= idx) {
+		ERR(ERR_INVALID_INPUT);
+		return -1;
+	}
+
+	for (size_t i = 0; i < m->size2; i++) {
+		m->data[m->tda * idx + i] = val;
+	}
+
+	return 0;
+}
+
+int matrix_fill_col(gsl_matrix *m, size_t idx, double val)
+{
+	if (!m || m->size2 <= idx) {
+		ERR(ERR_INVALID_INPUT);
+		return -1;
+	}
+
+	for (size_t i = 0; i < m->size1; i++) {
+		m->data[m->tda * i + idx] = val;
+	}
+
+	return 0;
 }
 
 int matrix_add_vec_rows(gsl_matrix *m, gsl_vector *v)
@@ -727,7 +755,7 @@ gsl_vector *vector3_cross(gsl_vector *va, gsl_vector *vb)
 	b1 = gsl_vector_get(vb, 1);
 	b2 = gsl_vector_get(vb, 2);
 
-	double cross_arr[9] = {
+	const double cross_arr[9] = {
 		a1 * b2 - a2 * b1,
 		a2 * b0 - a0 * b2,
 		a0 * b1 - a1 * b0,
@@ -794,7 +822,7 @@ gsl_matrix *mat_rot_from_2vec(gsl_vector *from, gsl_vector *to)
 	rcos = cosf(phi);
 	rsin = sinf(phi);
 
-	double mat_arr[9] = {
+	const double mat_arr[9] = {
 		[0] = rcos + a0 * a0 * (1 - rcos),
 		[1] = a2 * rsin + a1 * a0 * (1 - rcos),
 		[2] = -a1 * rsin + a2 * a0 * (1 - rcos),
@@ -813,6 +841,45 @@ gsl_matrix *mat_rot_from_2vec(gsl_vector *from, gsl_vector *to)
 	gsl_vector_free(axis_m);
 
 	return mat;
+}
+
+void matrix_increments(gsl_matrix *m)
+{
+	if (!m) {
+		return;
+	}
+
+	for (size_t i = 0; i < m->size1 - 1; i++) {
+		for (size_t j = 0; j < m->size2; j++) {
+			m->data[m->tda * i + j] =
+				m->data[m->tda * (i + 1) + j] - m->data[m->tda * i + j];
+		}
+	}
+
+	memset(m->data + (m->tda * (m->size1 - 1)), 0, sizeof(double) * m->tda);
+	m->size1--;
+}
+
+void vector_add_ddim(gsl_vector *a, gsl_vector *b)
+{
+	if (!a || !b) {
+		FATAL(ERR_INVALID_INPUT);
+	}
+
+	for (size_t i = 0; i < a->size; i++) {
+		a->data[i] += i < b->size ? b->data[i] : 0.0;
+	}
+}
+
+void vector_sub_ddim(gsl_vector *a, gsl_vector *b)
+{
+	if (!a || !b) {
+		FATAL(ERR_INVALID_INPUT);
+	}
+
+	for (size_t i = 0; i < a->size; i++) {
+		a->data[i] -= i < b->size ? b->data[i] : 0.0;
+	}
 }
 
 gsl_vector *vector_sub_n(gsl_vector *a, gsl_vector *b)
@@ -1157,8 +1224,8 @@ double area(const double *p1, const double *p2, const double *p3)
 				2.0);
 }
 
-bool is_inside_triangle(gsl_vector *pt, gsl_matrix *trig, double trig_scale,
-						double *cof)
+bool is_inside_triangle(const gsl_vector *pt, gsl_matrix *trig,
+						double trig_scale, double *cof)
 {
 	double A, A1, A2, A3, c;
 

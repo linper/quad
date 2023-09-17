@@ -8,6 +8,7 @@
 #pragma once
 
 //#include "json_helper.h"
+#include "stance.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -73,6 +74,7 @@ typedef struct model {
 	leg_t *cw_legs[N_LEGS]; ///< 	Clockwise leg ptr array(1st front-left)
 	sens_t *sens; ///< 				Sensor info
 	gsl_matrix *angles; ///< 		Calculated joint angles (4 x 3)
+	movement_t *move; ///< 			Movement struct
 
 	/***************
 	*  CONSTANTS  *

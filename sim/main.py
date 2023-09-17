@@ -102,9 +102,9 @@ def load_env():
 
 def load_robot():
     useMaximalCoordinates = False
-    # model = p.loadURDF("quad3.xacro", [0.0, 0.0, 0.5], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
-    model = p.loadURDF("resources/quad.xacro", [
-                       0.0, 0.0, 0.5], useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
+    model = p.loadURDF("resources/quad.xacro", [0.0, 0.0, 0.19], useFixedBase=True, useMaximalCoordinates=useMaximalCoordinates)
+    # model = p.loadURDF("resources/quad.xacro", [0.0, 0.0, 0.5],
+                       # useFixedBase=False, useMaximalCoordinates=useMaximalCoordinates)
     return model
 
 

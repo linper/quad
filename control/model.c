@@ -472,9 +472,18 @@ void model_step()
 
 	calc_balance();
 
+resched:
+	if (g_model->move && g_model->move->need_sched) {
+		get_movement(NULL, NULL, true);
+	}
+
 	for (int i = 0; i < N_LEGS; ++i) {
 		l = g_model->legs[i];
 		plan_step(&l->plan);
+	}
+
+	if (g_model->move && g_model->move->need_sched) {
+		goto resched;
 	}
 
 	model_get_angles();
@@ -661,6 +670,7 @@ void model_free(model_t *mod)
 			leg_free(mod->legs[i]);
 		}
 
+		movement_free(mod->move);
 		gsl_matrix_free(mod->angles);
 		sens_free(g_model->sens);
 		free(mod);

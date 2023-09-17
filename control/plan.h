@@ -48,12 +48,23 @@ typedef struct dst_pt {
 } dpt_t;
 
 void dpt_free(dpt_t *d);
-dpt_t *dpt_new(const double pos[3], double ts, double vps);
-dpt_t *dpt_new2(gsl_vector *pos, double ts, double vps);
-dpt_t *dpt_new3(gsl_vector *pos, double ts, double vps);
+dpt_t *dpt_new(const double pos[3], double ts, double vps, bool is_up);
 dpt_t *dpt_clone(dpt_t *d);
 
-static inline void dpt_set_pos(dpt_t *p, double pos[3])
+static inline dpt_t *dpt_from_vec(gsl_vector *pos, double ts, double vps,
+								  bool is_up)
+{
+	return dpt_new(pos->data, ts, vps, is_up);
+}
+
+static inline dpt_t *dpt_from_param(double x, double y, double z, double ts,
+									double vps, bool is_up)
+{
+	double pos[3] = { x, y, z };
+	return dpt_new(pos, ts, vps, is_up);
+}
+
+static inline void dpt_set_pos(dpt_t *p, const double pos[3])
 {
 	if (p)
 		vector_update_array(p->pos, 3, pos);
@@ -64,7 +75,7 @@ typedef int (*speed_func)(struct leg_plan *, dpt_t *, dpt_t *, gsl_vector **,
 
 typedef struct leg_plan {
 	bool need_plan; ///< 				Is replan needed
-	bool need_sched; ///< 				Is movement resceduling needed
+	bool up; ///< 						Is leg lifted
 	fsm_t *fsm; ///< 					FSM of the leg.
 	double cur_ts; ///< 				Current time step
 
@@ -91,18 +102,6 @@ int plan_new(plan_t *p);
 
 void plan_free(plan_t *p);
 
-//void plan_reset(plan_t *self);
-
-//void plan_adjust(plan_t *self, gsl_vector *adj);
-
-//void plan_compensate(plan_t *self);
-
 void plan_step(plan_t *self);
 
-//void plan_next(plan_t *self, bool repeat);
-
-//void plan_make_steps(plan_t *self);
-
-//void plan_blob_check(plan_t *self, size_t n);
-
-void plan_make_movement(plan_t *self, gsl_matrix *pos, gsl_block *ups);
+void plan_make_movement(plan_t *self, glist_t *lst);

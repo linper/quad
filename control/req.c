@@ -5,10 +5,13 @@
  * @date 2023-02-13
  */
 
+#include <glist.h>
 #include <gsl/gsl_block_double.h>
 #include <gsl/gsl_vector_double.h>
 #include <mth.h>
+#include <plan.h>
 #include <stance.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -151,6 +154,7 @@ static int rsp_vstep(ipc_conn_t *conn, struct json_object *jreq,
 	for (int i = 0; i < N_LEGS; i++) {
 		json_object *l = json_object_new_object();
 		leg_t *leg = g_model->legs[i];
+		json_object_object_add(l, "up", json_object_new_boolean(leg->plan.up));
 		json_object_object_add(l, "bal", json_object_new_int(leg->bal));
 		json_object_object_add(l, "idx", json_object_new_int(leg->idx));
 		json_object_object_add(l, "name", json_object_new_string(leg->name));
@@ -175,9 +179,9 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 	(void)conn;
 
 	int n_tasks, n_points, lidx;
-	double dir_arr[2];
-	gsl_matrix *pos;
-	gsl_block *ups;
+	double dir_arr[2], pos_arr[3];
+	bool is_up;
+	glist_t *lst;
 
 	json_object *jtasks, *jtask, *jpts, *jpt, *tmp1, *jdir;
 
@@ -214,8 +218,8 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 
 		n_points = json_object_get_int(tmp1);
 
-		pos = matrix_calloc(n_points, 3);
-		ups = block_calloc(n_points);
+		lst = glist_new(16);
+		glist_set_free_cb(lst, (void (*)(void *))dpt_free);
 
 		if (!json_object_object_get_ex(jtask, "points", &jpts))
 			goto err;
@@ -227,39 +231,56 @@ static int rsp_go(ipc_conn_t *conn, struct json_object *jreq,
 			if (!json_object_object_get_ex(jpt, "up", &tmp1))
 				goto err;
 
-			ups->data[j] = json_object_get_boolean(tmp1);
+			is_up = json_object_get_boolean(tmp1);
 
 			if (!json_object_object_get_ex(jpt, "x", &tmp1))
 				goto err;
 
-			pos->data[pos->tda * j] = json_object_get_double(tmp1);
+			pos_arr[0] = json_object_get_double(tmp1);
 
 			if (!json_object_object_get_ex(jpt, "y", &tmp1))
 				goto err;
 
-			pos->data[pos->tda * j + 1] = json_object_get_double(tmp1);
+			pos_arr[1] = json_object_get_double(tmp1);
 
 			if (!json_object_object_get_ex(jpt, "z", &tmp1))
 				goto err;
 
-			pos->data[pos->tda * j + 2] = json_object_get_double(tmp1);
-		}
+			pos_arr[2] = json_object_get_double(tmp1);
 
-		gsl_vector *dir = vector_from_array(2, dir_arr);
+			dpt_t *pt = dpt_new(pos_arr, 0.0, 0.0, is_up);
+			glist_push(lst, pt);
+		}
 
 		if (lidx != -1) {
-			plan_make_movement(&g_model->legs[lidx]->plan, pos, ups);
+			double tsum = 0.0;
+			glist_foreach (dpt_t *p, lst) {
+				tsum += 50;
+				p->ts = tsum;
+			}
+			plan_make_movement(&g_model->legs[lidx]->plan, lst);
 		} else {
-			get_movement(dir, pos);
+			gsl_matrix *tg_pts = matrix_calloc(n_points, 3);
+			gsl_matrix *tg_dirs = matrix_calloc(n_points, 2);
+			dpt_t *pt = glist_get(lst, i);
+			for (int k = 0; k < n_points; k++) {
+				tg_pts->data[tg_pts->tda * k + 0] = *pt->x;
+				tg_pts->data[tg_pts->tda * k + 1] = *pt->y;
+				tg_pts->data[tg_pts->tda * k + 2] = *pt->z;
+				tg_dirs->data[tg_dirs->tda * k + 0] = dir_arr[0];
+				tg_dirs->data[tg_dirs->tda * k + 1] = dir_arr[1];
+			}
+			/*gsl_vector *dir = vector_from_array(2, dir_arr);*/
+			get_movement(tg_pts, tg_dirs, false);
+			/*gsl_vector_free(dir);*/
 		}
 
-		gsl_matrix_free(pos);
-		gsl_vector_free(dir);
-		gsl_block_free(ups);
+		glist_free_shallow(lst);
 	}
 
 	return 0;
 err:
+	glist_free(lst);
 
 	ERR("Parsing go command failed \n");
 	return 1;

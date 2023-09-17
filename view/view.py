@@ -32,8 +32,9 @@ class VSens():
 
 
 class VLeg():
-    def __init__(self, bal, idx, name, pos, def_pos):
+    def __init__(self, bal, idx, name, pos, def_pos, up):
         self.do_balance: bool = bool(bal)
+        self.up: bool = bool(up)
         self.name: str = name
         self.idx: int = idx
         self.position: np.ndarray = np.array(pos)
@@ -240,8 +241,9 @@ class GrView:
         self.space.create_oval(pt[1] - r, pt[0] - r,
                                pt[1] + r, pt[0] + r, fill=color)
         leg_name_abr = "".join([c[0] for c in leg.name.split("_")])
+        u_state = "U" if leg.up else "D"
         self.space.create_text(pt[1] - r - 40, pt[0] - r - 10,
-                               anchor=tk.W, text=f"{leg_name_abr}:{round(leg.position[2], 3)}")
+                               anchor=tk.W, text=f"{u_state} {leg_name_abr}:{round(leg.position[2], 3)}")
 
     def draw_circle(self, pos, color):
         r = 6
@@ -503,7 +505,7 @@ class GrView:
                          data["tf_pos"], data["tf_type"])
             raw_legs = data["legs"]
             legs = [VLeg(l["bal"], l["idx"], l["name"], l["pos"],
-                         l["def_pos"]) for l in raw_legs]
+                         l["def_pos"], l["up"]) for l in raw_legs]
             self.q = VQuad(legs, sens)
             self.update()
             self.call_control(json.dumps(
